@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.pyc
+
+# Ambiente virtual local (crie o seu: python -m venv .venv)
+.venv/
+
+# Artefatos gerados em execução
+dados/anotacoes/
+dados/capturas/
+dados/relatorios/
