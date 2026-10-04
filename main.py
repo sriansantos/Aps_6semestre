@@ -10,6 +10,7 @@ experiência na memória persistente, aprendendo progressivamente.
 Comandos:
   python main.py analisar <imagens...>          Analisa imagens e pede confirmação humana
   python main.py analisar --pasta <dir>         Analisa todas as imagens de uma pasta
+  python main.py analisar ... --largura-m 5     Informa a largura real da cena (área em m²)
   python main.py analisar ... --sem-feedback    Analisa sem pedir confirmação
   python main.py adicionar <dir> --rotulo d|l   Ensina um lote inteiro (d=desperdício, l=limpo)
   python main.py status                         Mostra o estado da memória e do modelo
@@ -32,6 +33,7 @@ try:
     import cv2  # noqa: F401  (verificação antecipada da principal dependência)
 
     from pivc_core.detetor import DetetorDesperdicio
+    from pivc_core.materiais import CHAVES_CLI, NOME_MATERIAIS
     from pivc_core.memoria import NOME_ROTULOS, ROTULO_DESPERDICIO, ROTULO_LIMPO
     from pivc_core.visao import carregar_imagem
 except ModuleNotFoundError as erro:
@@ -49,6 +51,11 @@ except ModuleNotFoundError as erro:
 
 EXTENSOES = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 LARGURA_LINHA = 74
+
+
+def num(valor, casas=1):
+    """Número com vírgula decimal (pt-BR) para a saída textual."""
+    return f"{valor:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 # ---------------------------------------------------------------------- #
@@ -80,8 +87,32 @@ def mostrar_analise(resultado, caminho_anotada=None):
     n_regioes = len(resultado.contornos)
     if n_regioes:
         maior = max(d["area_frac"] for d in resultado.contornos)
-        print(f"  Regiões candidatas a entulho: {n_regioes} "
-              f"(a maior ocupa {maior * 100:.0f}% da cena)")
+        plural = "" if n_regioes == 1 else "s"
+        detalhe_agl = ""
+        if resultado.aglomerados_por_material:
+            por_material = ", ".join(
+                f"{NOME_MATERIAIS.get(m, m)} {n}" for m, n in
+                sorted(resultado.aglomerados_por_material.items(), key=lambda kv: -kv[1])
+            )
+            detalhe_agl = f" — por material: {por_material}"
+        print(f"  Aglomerado{plural} de desperdício: {n_regioes}{detalhe_agl} "
+              f"(o maior ocupa {maior * 100:.0f}% da cena)")
+    if resultado.material_dominante:
+        frac = resultado.material_distribuicao_final.get(resultado.material_dominante, 0.0)
+        print(f"  Material predominante: {NOME_MATERIAIS[resultado.material_dominante]} "
+              f"({frac * 100:.0f}% da área desperdiçada; confiança {resultado.material_confianca * 100:.0f}%)")
+    if resultado.areas_m2:
+        aspecto = resultado.imagem_altura / max(resultado.imagem_largura, 1)
+        area_cena = (resultado.largura_m or 0) ** 2 * aspecto
+        rotulo_area = ("Área do descarte" if resultado.veredito_desperdicio
+                       else "Área CANDIDATA a descarte (veredito: sem desperdício)")
+        print(f"  {rotulo_area} — cena ≈ {num(area_cena)} m² "
+              f"(largura {num(resultado.largura_m, 2)} m):")
+        for material, area in sorted(resultado.areas_m2.items(), key=lambda kv: -kv[1])[:4]:
+            print(f"    • {NOME_MATERIAIS.get(material, material)}: {num(area)} m²")
+        print(f"    TOTAL: {num(sum(resultado.areas_m2.values()))} m²")
+    elif resultado.veredito_desperdicio:
+        print("  Área do descarte: nenhuma área de material medida.")
     if caminho_anotada:
         print(f"  Imagem-relatório salva em: {caminho_anotada}")
     linha("═")
@@ -108,6 +139,28 @@ def perguntar_feedback(resultado):
         print("  Resposta não reconhecida — digite d ou l.")
 
 
+def perguntar_material(palpite):
+    """Pergunta o material predominante quando o rótulo confirmado é
+    desperdício. Enter mantém o palpite do sistema (ou 'outro' se não houver)."""
+    padrao = palpite if palpite else "outro"
+    ajuda = ", ".join(
+        f"[{chave}]{nome.lower()}" for chave, nome in
+        (("g", "gesso"), ("p", "papelão"), ("m", "madeira"), ("l", "lonas/plástico"),
+         ("a", "alvenaria"), ("o", "outro"))
+    )
+    while True:
+        resposta = input(
+            f"Material predominante — {ajuda} (Enter mantém {NOME_MATERIAIS[padrao]}): "
+        ).strip().lower()
+        if resposta == "":
+            return padrao
+        if resposta in CHAVES_CLI:
+            return CHAVES_CLI[resposta]
+        if resposta in NOME_MATERIAIS:  # aceita também o nome completo
+            return resposta
+        print("  Resposta não reconhecida — use g, p, m, l, a ou o.")
+
+
 def processar_feedback(detetor, resultado):
     try:
         rotulo = perguntar_feedback(resultado)
@@ -118,15 +171,27 @@ def processar_feedback(detetor, resultado):
         print("• Sem confirmação: esta imagem não entrou na memória.")
         return True
 
+    material = None
+    if rotulo == ROTULO_DESPERDICIO:
+        try:
+            material = perguntar_material(resultado.material_dominante)
+        except (EOFError, KeyboardInterrupt):
+            print("\nFeedback interrompido — experiência NÃO registrada.")
+            return False
+
     observacao = ""
     try:
         observacao = input("Observação (opcional, Enter pula): ").strip()
     except (EOFError, KeyboardInterrupt):
         pass
 
-    exp_id, acertou, consolidou = detetor.registrar_feedback(resultado, rotulo, observacao)
+    exp_id, acertou, consolidou = detetor.registrar_feedback(
+        resultado, rotulo, observacao, material=material)
     situacao = "o sistema ACERTOU" if acertou else "o sistema ERROU e foi CORRIGIDO"
     print(f"✔ Experiência #{exp_id} registrada na memória ({situacao}).")
+    if material:
+        print(f"  Material confirmado: {NOME_MATERIAIS[material]} "
+              f"(a memória de material aprendeu com isso).")
     if consolidou:
         print(f"  Modelo incremental consolidado com {detetor.memoria.total} experiências.")
     return True
@@ -153,7 +218,7 @@ def cmd_analisar(args, detetor):
         if len(set(caminhos)) > 1:
             print(f"\n[{i}/{len(set(caminhos))}]")
         try:
-            resultado = detetor.analisar(caminho)
+            resultado = detetor.analisar(caminho, largura_m=args.largura_m)
         except ValueError as erro:
             print(f"✖ Não foi possível analisar '{caminho}': {erro}")
             continue
@@ -224,6 +289,11 @@ def cmd_status(args, detetor):
     print(f"    - sem desperdício (local limpo)    : {s['limpo']}")
     if s["taxa_acerto"] is not None:
         print(f"  Taxa de acerto do sistema antes da confirmação: {s['taxa_acerto'] * 100:.1f}%")
+    if s["materiais"]:
+        lista_materiais = ", ".join(
+            f"{NOME_MATERIAIS.get(m, m)} {n}" for m, n in sorted(s["materiais"].items())
+        )
+        print(f"  Materiais confirmados pelo operador: {lista_materiais}")
     estado = (f"treinado com {s['n_treino']} experiências" if s["modelo_treinado"]
               else "ainda não treinado (falta confirmação das duas classes)")
     print(f"  Modelo incremental: {estado} (reconstruído da memória a cada inicialização)")
@@ -279,6 +349,9 @@ def main():
     p_an = sub.add_parser("analisar", help="analisa imagens e pede confirmação humana")
     p_an.add_argument("imagens", nargs="*", help="caminhos das imagens")
     p_an.add_argument("--pasta", default=None, help="analisa todas as imagens desta pasta")
+    p_an.add_argument("--largura-m", type=float, default=None,
+                      help="largura real da cena em metros (para a área do descarte em m²; "
+                           "padrão: 4,0 m)")
     p_an.add_argument("--sem-feedback", action="store_true",
                       help="não pede confirmação humana (só julga)")
     p_an.set_defaults(func=cmd_analisar)

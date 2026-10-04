@@ -27,6 +27,7 @@ import numpy as np
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 
+from .materiais import NOME_MATERIAIS
 from .visao import NOMES_CARACTERISTICAS, VERSAO_CARACTERISTICAS
 
 ROTULO_DESPERDICIO = 1
@@ -80,14 +81,20 @@ class MemoriaExperiencias:
     # ------------------------------------------------------------------ #
     # Registro de experiências
     # ------------------------------------------------------------------ #
-    def adicionar(self, caminho_imagem, rotulo, probabilidade_sistema, acertou, observacao, vetor):
-        """Registra uma experiência confirmada por humano. Retorna o id."""
+    def adicionar(self, caminho_imagem, rotulo, probabilidade_sistema, acertou, observacao, vetor,
+                  material=None):
+        """Registra uma experiência confirmada por humano. Retorna o id.
+
+        `material` (chave de materiais.MATERIAIS) é opcional: cenas limpas não
+        o têm; experiências antigas também não — o código usa .get() em todo
+        lugar que o consulta."""
         exp = {
             "id": (self.experiencias[-1]["id"] + 1) if self.experiencias else 1,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
             "caminho": str(caminho_imagem),
             "rotulo": int(rotulo),
             "rotulo_texto": NOME_ROTULOS[int(rotulo)],
+            "material": material,
             "probabilidade_sistema": round(float(probabilidade_sistema), 4),
             "sistema_acertou": bool(acertou),
             "observacao": observacao or "",
@@ -174,20 +181,23 @@ class MemoriaExperiencias:
             f.write(f"- Com desperdício: {d} | Sem desperdício: {l}\n")
             if taxa is not None:
                 f.write(f"- Taxa de acerto do sistema antes da confirmação: **{taxa * 100:.1f}%**\n")
-            f.write("\n| ID | Data/Hora | Imagem | Rótulo | Prob. sistema | Sistema acertou? |\n")
-            f.write("|---|---|---|---|---|---|\n")
+            f.write("\n| ID | Data/Hora | Imagem | Rótulo | Material | Prob. sistema | Sistema acertou? |\n")
+            f.write("|---|---|---|---|---|---|---|\n")
             for e in self.experiencias:
                 caminho = os.path.basename(e["caminho"])
                 acerto = "Sim" if e["sistema_acertou"] else "**Não (corrigido)**"
+                material = NOME_MATERIAIS.get(e.get("material"), "—")
                 f.write(
-                    f"| {e['id']} | {e['timestamp']} | {caminho} | {e['rotulo_texto']} "
+                    f"| {e['id']} | {e['timestamp']} | {caminho} | {e['rotulo_texto']} | {material} "
                     f"| {e['probabilidade_sistema']:.0%} | {acerto} |\n"
                 )
         with open(cam_csv, "w", encoding="utf-8", newline="") as f:
             writer = csv.writer(f, delimiter=";")
-            writer.writerow(["id", "timestamp", "caminho", "rotulo", "probabilidade_sistema", "sistema_acertou", "observacao"])
+            writer.writerow(["id", "timestamp", "caminho", "rotulo", "material",
+                             "probabilidade_sistema", "sistema_acertou", "observacao"])
             for e in self.experiencias:
                 writer.writerow([e["id"], e["timestamp"], e["caminho"], e["rotulo_texto"],
+                                 NOME_MATERIAIS.get(e.get("material"), ""),
                                  e["probabilidade_sistema"], e["sistema_acertou"], e["observacao"]])
         return cam_md, cam_csv
 

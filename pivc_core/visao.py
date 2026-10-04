@@ -371,13 +371,20 @@ def vetor_de(caracteristicas):
     return np.array([float(caracteristicas[n]) for n in NOMES_CARACTERISTICAS], dtype=np.float64)
 
 
-def anotar_imagem(img, contornos, veredito_desperdicio, probabilidade):
+def anotar_imagem(img, contornos, veredito_desperdicio, probabilidade,
+                  cores_regioes=None, legenda=None):
     """Gera a imagem 'relatório': contorna as regiões candidatas a entulho
-    e carimba o veredito no canto superior. Vermelho = desperdício detectado,
-    verde = cena sem desperdício."""
+    e carimba o veredito no canto superior.
+
+    `cores_regioes` (lista de tuplas BGR alinhada com 'contornos') permite uma
+    cor por tipo de material; sem ela, vale a regra antiga: vermelho =
+    desperdício detectado, verde = cena sem desperdício. `legenda` é uma
+    lista de (texto, cor) desenhada abaixo do carimbo (composição do
+    desperdício por material)."""
     anotada = img.copy()
-    cor = (0, 0, 230) if veredito_desperdicio else (40, 180, 40)
-    for d in contornos:
+    cor_padrao = (0, 0, 230) if veredito_desperdicio else (40, 180, 40)
+    for i, d in enumerate(contornos):
+        cor = cores_regioes[i] if cores_regioes else cor_padrao
         cv2.drawContours(anotada, [d["contorno"]], -1, cor, 2)
         x, y, w, h = cv2.boundingRect(d["contorno"])
         cv2.putText(
@@ -389,7 +396,26 @@ def anotar_imagem(img, contornos, veredito_desperdicio, probabilidade):
     texto = f"{rotulo}: {int(round(probabilidade * 100))}%"
     (tw, th), base = cv2.getTextSize(texto, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
     cv2.rectangle(anotada, (8, 8), (16 + tw, 20 + th + base), (20, 20, 20), -1)
-    cv2.putText(anotada, texto, (12, 18 + th), cv2.FONT_HERSHEY_SIMPLEX, 0.7, cor, 2, cv2.LINE_AA)
+    cv2.putText(anotada, texto, (12, 18 + th), cv2.FONT_HERSHEY_SIMPLEX, 0.7, cor_padrao, 2, cv2.LINE_AA)
+
+    if legenda:
+        # Faixa de fundo para a legenda ficar legível sobre qualquer cena.
+        y0 = 20 + th + base + 12
+        altura_item = 20
+        largura_legenda = max(
+            cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)[0][0] for t, _ in legenda
+        )
+        cv2.rectangle(
+            anotada, (8, y0), (34 + largura_legenda, y0 + altura_item * len(legenda) + 6),
+            (20, 20, 20), -1,
+        )
+        for i, (texto_item, cor_item) in enumerate(legenda):
+            y = y0 + 4 + i * altura_item
+            cv2.rectangle(anotada, (14, y), (28, y + 12), cor_item, -1)
+            cv2.putText(
+                anotada, texto_item, (34, y + 10),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.45, (240, 240, 240), 1, cv2.LINE_AA,
+            )
     return anotada
 
 

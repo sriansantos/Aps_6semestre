@@ -23,7 +23,8 @@ try:
     import cv2
     from PIL import Image, ImageTk
 
-    from pivc_core.detetor import DetetorDesperdicio
+    from pivc_core.detetor import DetetorDesperdicio, LARGURA_PADRAO_M
+    from pivc_core.materiais import CHAVES_CLI, NOME_MATERIAIS
 except ModuleNotFoundError as erro:
     print(
         f"\nERRO: falta a biblioteca '{erro.name}' neste Python.\n\n"
@@ -223,6 +224,20 @@ class PainelPIVC:
         self.lbl_conf = ttk.Label(barra_conf, text="—", width=26)
         self.lbl_conf.pack(side=tk.LEFT)
 
+        # Área do descarte -------------------------------------------------
+        quadro_c = ttk.LabelFrame(self.root, text=" Área do descarte (m²) ", padding=8)
+        quadro_c.pack(fill=tk.X, padx=8, pady=(6, 0))
+        ttk.Label(quadro_c, text="Largura real da cena (m):").pack(side=tk.LEFT)
+        self.var_largura = tk.StringVar(value=f"{LARGURA_PADRAO_M:.2f}".replace(".", ","))
+        self.entrada_largura = ttk.Entry(quadro_c, textvariable=self.var_largura, width=7)
+        self.entrada_largura.pack(side=tk.LEFT, padx=(4, 4))
+        self.entrada_largura.bind("<Return>", lambda _e: self._mostrar_area())
+        self.entrada_largura.bind("<FocusOut>", lambda _e: self._mostrar_area())
+        self.lbl_area_total = tk.Label(quadro_c, text="—", font=("Segoe UI", 12, "bold"), fg=CINZA_TXT)
+        self.lbl_area_total.pack(side=tk.LEFT, padx=(12, 4))
+        self.lbl_area_detalhe = ttk.Label(quadro_c, foreground=CINZA_TXT, wraplength=420)
+        self.lbl_area_detalhe.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
         # Raciocínio ------------------------------------------------------
         quadro_r = ttk.LabelFrame(self.root, text=" Linha de pensamento do sistema ", padding=6)
         quadro_r.pack(fill=tk.BOTH, expand=True, padx=8)
@@ -236,6 +251,13 @@ class PainelPIVC:
         # Confirmação humana ----------------------------------------------
         quadro_f = ttk.LabelFrame(self.root, text=" Confirmação humana (o sistema aprende com você) ", padding=8)
         quadro_f.pack(fill=tk.X, padx=8, pady=(6, 2))
+        ttk.Label(quadro_f, text="Material predominante:").pack(side=tk.LEFT)
+        self.var_material = tk.StringVar()
+        self.cmb_material = ttk.Combobox(
+            quadro_f, textvariable=self.var_material, state=tk.DISABLED, width=16,
+            values=[NOME_MATERIAIS[m] for m in CHAVES_CLI.values()],
+        )
+        self.cmb_material.pack(side=tk.LEFT, padx=(4, 10))
         self.btn_desperdicio = ttk.Button(quadro_f, text="✔ É desperdício", command=lambda: self.confirmar(1),
                                           state=tk.DISABLED)
         self.btn_limpo = ttk.Button(quadro_f, text="✔ Sem desperdício", command=lambda: self.confirmar(0),
@@ -338,12 +360,26 @@ class PainelPIVC:
             texto, cor = "⚠ DESPERDÍCIO DE MATERIAIS DETECTADO", VERMELHO
         else:
             texto, cor = "✔ SEM DESPERDÍCIO DE MATERIAIS", VERDE
+        if r.material_dominante:
+            frac = r.material_distribuicao_final.get(r.material_dominante, 0.0)
+            texto += f"  ·  {NOME_MATERIAIS[r.material_dominante]} ({frac * 100:.0f}% da área)"
+        n_agl = sum(r.aglomerados_por_material.values())
+        if n_agl:
+            plural = "" if n_agl == 1 else "s"
+            texto += f"  ·  {n_agl} aglomerado{plural}"
         self.lbl_veredito.configure(text=f"{texto}  —  {r.percentual} (confiança {r.confianca})", fg=cor)
 
         self.barra.configure(state=tk.NORMAL)
         self.barra.set(r.probabilidade * 100)
         self.barra.configure(state=tk.DISABLED)
         self.lbl_conf.configure(text=f"{r.percentual} de probabilidade")
+
+        if r.material_dominante:
+            self.var_material.set(NOME_MATERIAIS[r.material_dominante])
+            self.cmb_material.configure(state="readonly")
+        else:
+            self.var_material.set("")
+            self.cmb_material.configure(state=tk.DISABLED)
 
         self.txt_raciocinio.configure(state=tk.NORMAL)
         self.txt_raciocinio.delete("1.0", tk.END)
@@ -360,6 +396,53 @@ class PainelPIVC:
 
         self.lbl_feedback.configure(text="")
         self._atualizar_status()
+        self._mostrar_area()
+
+    def _mostrar_area(self):
+        """Recalcula a área do descarte (m²) a partir da largura informada (m).
+        A distribuição de fração de cena por material já foi medida na análise —
+        só converte para m² com a escala informada pelo operador."""
+        if self.resultado is None or not self.resultado.distribuicao_materiais:
+            self.lbl_area_total.configure(text="—", fg=CINZA_TXT)
+            self.lbl_area_detalhe.configure(
+                text=("Cena sem desperdício detectado ou nenhuma imagem analisada ainda."
+                      if self.resultado is not None else
+                      "Nenhuma imagem analisada ainda."))
+            return
+        try:
+            largura = float(self.var_largura.get().replace(",", "."))
+        except ValueError:
+            self.lbl_area_total.configure(text="—", fg=CINZA_TXT)
+            self.lbl_area_detalhe.configure(text="Informe a largura da cena (ex.: 4,5) para calcular a área.")
+            return
+        if largura <= 0:
+            self.lbl_area_total.configure(text="—", fg=CINZA_TXT)
+            self.lbl_area_detalhe.configure(text="A largura da cena deve ser maior que zero.")
+            return
+        aspecto = self.resultado.imagem_altura / max(self.resultado.imagem_largura, 1)
+        area_cena = largura * largura * aspecto
+        areas = {
+            m: f * area_cena
+            for m, f in self.resultado.distribuicao_materiais.items() if f * area_cena >= 0.01
+        }
+        if not areas:
+            self.lbl_area_total.configure(text="—", fg=CINZA_TXT)
+            self.lbl_area_detalhe.configure(text="Nada a estimar.")
+            return
+
+        def _num(valor, casas=1):
+            return f"{valor:,.{casas}f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+        self.lbl_area_total.configure(
+            text=(f"TOTAL {_num(sum(areas.values()))} m²" if self.resultado.veredito_desperdicio
+                  else f"~{_num(sum(areas.values()))} m² (candidata)"),
+            fg=VERMELHO if self.resultado.veredito_desperdicio else CINZA_TXT)
+        detalhe = " · ".join(
+            f"{NOME_MATERIAIS.get(m, m)}: {_num(a)} m²"
+            for m, a in sorted(areas.items(), key=lambda kv: -kv[1])[:4]
+        )
+        self.lbl_area_detalhe.configure(
+            text=f"Cena ≈ {_num(area_cena)} m² — {detalhe}")
 
     # ------------------------------------------------------------------ #
     # Confirmação humana → memória
@@ -367,10 +450,19 @@ class PainelPIVC:
     def confirmar(self, rotulo):
         if self.resultado is None:
             return
-        exp_id, acertou, consolidou = self.detetor.registrar_feedback(self.resultado, rotulo)
+        material = None
+        if rotulo == 1 and self.var_material.get():
+            nome_escolhido = self.var_material.get()
+            for chave, nome in NOME_MATERIAIS.items():
+                if nome == nome_escolhido:
+                    material = chave
+                    break
+        exp_id, acertou, consolidou = self.detetor.registrar_feedback(
+            self.resultado, rotulo, material=material)
         situacao = ("o sistema havia acertado" if acertou
                     else "o sistema havia errado — memória CORRIGIDA")
         msg = (f"✔ Experiência #{exp_id} registrada ({situacao})."
+               + (f" Material: {NOME_MATERIAIS[material]}." if material else "")
                + (f" Modelo consolidado com {self.detetor.memoria.total} experiências." if consolidou else ""))
         self.lbl_feedback.configure(text=msg, foreground=VERDE if acertou else VERMELHO)
         self._atualizar_status()

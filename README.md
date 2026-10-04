@@ -43,6 +43,7 @@ Todas as bibliotecas são gratuitas e o sistema funciona 100% offline.
 | `python main.py analisar foto.jpg` | Analisa uma imagem e pede sua confirmação |
 | `python main.py analisar foto1.jpg foto2.png` | Analisa várias imagens |
 | `python main.py analisar --pasta fotos_obra/` | Analisa todas as imagens de uma pasta |
+| `python main.py analisar foto.jpg --largura-m 5` | Informa a largura real da cena (m) para a área do descarte em m² |
 | `python main.py analisar foto.jpg --sem-feedback` | Só julga, sem pedir confirmação |
 | `python main.py adicionar pasta/ --rotulo d` | Ensina um lote inteiro (`d`=desperdício, `l`=limpo) |
 | `python main.py status` | Mostra memória, modelo e taxa de acerto |
@@ -65,12 +66,53 @@ Linha de pensamento do sistema:
   • Passo 4 — Memória de casos (analogia forte): 4 casos semelhantes...
   • Passo 5 — Modelo incremental (regressão logística, 4 experiências): p = 0.00.
   • Passo 6 — Fusão adaptativa (pesos: ...) → p final = 0.45.
+  • Passo 7 — Identificação de material: assinaturas visuais por região
+    (cor/textura/contorno) indicam Papelão 100%. Memória de material
+    (2 confirmações, peso 0.23) vota: Papelão 90% → material predominante:
+    Papelão (confiança 94%).
+  • Passo 8 — Área do descarte (cena ≈ 12,0 m², largura 4,00 m):
+    Papelão 2,5 m² → total ≈ 2,5 m².
 O sistema acertou? [s]im / [n]não, corrigir / [p]ular:
 Rótulo correto — [d] desperdício / [l] local limpo:
+Material predominante — [g]esso, [p]apelão, [m]adeira, [l]lonas/plástico,
+[a]lvenaria, [o]utro (Enter mantém Papelão):
 Observação (opcional, Enter pula):
 ✔ Experiência #4 registrada na memória (o sistema ERROU e foi CORRIGIDO).
   Modelo incremental consolidado com 4 experiências.
 ```
+
+### Identificação do tipo de material e área do descarte (m²)
+
+Além do veredito (há/não há desperdício), o sistema identifica **o tipo de
+material predominante** — papelão, madeira, gesso/drywall, plástico/lonas,
+entulho de alvenaria — classificando **cada região candidata** por assinaturas
+visuais (marrom saturado x empoeirado, claro, cinza médio, vibrante, textura
+interna — `pivc_core/materiais.py`). A imagem-relatório ganha uma **cor por
+material e legenda** com a composição do desperdício.
+
+O operador confirma ou corrige o material junto com o veredito; essas
+confirmações formam uma **memória de material** que vota por analogia nas
+análises seguintes (mesmo princípio da memória de casos, com peso que cresce
+com o número de confirmações e cai quando a analogia é fraca).
+
+O sistema também **conta os aglomerados** (montes) de desperdício por
+material — cada região de ≥ 1% da cena é um monte ("2 aglomerados: Papelão 1,
+Gesso 1"). A unidade de contagem é o monte porque peças individuais dentro de
+uma pilha se tocam e se sobrepõem numa foto 2D: contá-las exigiria detecção
+de objetos por deep learning (trabalho futuro).
+
+Sobre o material identificado, o sistema estima **quanta área de material está
+desperdiçada**, em m²:
+
+```
+área da cena (m²) = largura_real² × (altura/largura da imagem)
+área por material = fração da cena detectada × área da cena
+```
+
+A **largura real da cena** não vem da foto (imagem 2D não tem escala absoluta):
+o operador informa `--largura-m` (terminal) ou o campo "Largura real da cena"
+(painel); sem isso vale o padrão de 4,0 m — e a saída indica qual largura foi
+usada.
 
 Cada análise gera também uma **imagem-relatório anotada** em
 `dados/anotacoes/`, com as regiões candidatas a entulho contornadas.
@@ -190,8 +232,8 @@ raciocínio que justifica cada veredito (explicabilidade).
 ```
 dados/
 ├── memoria.json                 # banco de casos (experiências + vetores) — legível
-                                  # (o modelo incremental é reconstruído deste arquivo
-                                  #  a cada inicialização — sem binário dependente de versão)
+│                                  # (o modelo incremental é reconstruído deste arquivo
+│                                  #  a cada inicialização — sem binário dependente de versão)
 ├── anotacoes/                   # imagens-relatório com as regiões contornadas
 ├── capturas/                    # fotos tiradas na hora pelo botão da câmera
 └── relatorios/                  # relatórios exportados (Markdown + CSV)
@@ -224,11 +266,12 @@ pivc-desperdicio/
 ├── pivc_core/
 │   ├── visao.py             # pipeline de extração de características (OpenCV)
 │   ├── detetor.py           # 3 linhas de pensamento + fusão + raciocínio explicável
+│   ├── materiais.py         # classificação do tipo de material por região (assinaturas)
 │   └── memoria.py           # banco de casos JSON + modelo incremental
 ├── imagens_modelo/          # imagens modelo fornecidas no enunciado da APS
 ├── imagens_teste/           # cenas adicionais usadas nos testes da equipe
 ├── dados/exemplos/          # recortes de teste (piso limpo, painéis, faixa branca)
-└── dados/                   # memória, anotações e relatórios (criados ao rodar)
+└── dados/                   # memória, custos, anotações e relatórios (criados ao rodar)
 ```
 
 ---
@@ -239,6 +282,10 @@ pivc-desperdicio/
   (há/não há entulho) e contorna as regiões candidatas; um passo natural é
   classificar cada região isoladamente (ex.: YOLO treinado com as anotações
   que o próprio sistema acumula).
+- **Escala da área:** foto 2D não tem escala absoluta — a área do descarte em
+  m² depende da largura real da cena informada pelo operador (padrão de 4,0 m,
+  indicado na saída). Objeto de referência na cena ou captura padronizada
+  (altura/ângulo fixos) reduziria esse erro.
 - **Condições de captura:** iluminação forte, sombras duras e ângulos muito
   oblíquos alteram os indicadores; o aprendizado por confirmação mitiga, mas
   padronização de captura (altura, horário) melhora a precisão.
