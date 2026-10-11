@@ -17,7 +17,7 @@ if not exist ".venv\Scripts\python.exe" (
     echo Isso pode levar alguns minutos. Aguarde.
     py -3.12 -m venv .venv 2>nul || python -m venv .venv
     ".venv\Scripts\python.exe" -m pip install --upgrade pip
-    ".venv\Scripts\python.exe" -m pip install opencv-python numpy scikit-learn pillow joblib
+    ".venv\Scripts\python.exe" -m pip install opencv-python numpy scikit-learn pillow flask
 )
 
 if "%~1"=="" (

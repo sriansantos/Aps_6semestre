@@ -332,6 +332,12 @@ def cmd_painel(args, detetor):
     return 0
 
 
+def cmd_site(args, detetor):
+    import webapp
+    webapp.executar(porta=args.porta, abrir_navegador=not args.nao_abrir_navegador)
+    return 0
+
+
 # ---------------------------------------------------------------------- #
 # Programa principal
 # ---------------------------------------------------------------------- #
@@ -370,6 +376,11 @@ def main():
 
     p_pa = sub.add_parser("painel", help="abre a interface gráfica")
     p_pa.set_defaults(func=cmd_painel)
+
+    p_si = sub.add_parser("site", help="abre o front-end web estilo 'swipe' (Tinder) no navegador")
+    p_si.add_argument("--porta", type=int, default=5000)
+    p_si.add_argument("--nao-abrir-navegador", action="store_true")
+    p_si.set_defaults(func=cmd_site)
 
     p_rs = sub.add_parser("resetar", help="apaga toda a memória aprendida")
     p_rs.set_defaults(func=cmd_resetar)

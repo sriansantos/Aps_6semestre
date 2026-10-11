@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0c0c">
+  <title>PIVC — desperdício? arraste</title>
+  <link rel="stylesheet" href="/static/estilo.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">🚧 PIVC <span>obra limpa</span></div>
+  <div class="chip" id="chip-memoria">🧠 memória: <b>—</b></div>
+</header>
+<div class="faixa-obra" aria-hidden="true"></div>
+
+<main>
+  <!-- Estado 1: entrada de fotos -->
+  <section id="tela-entrada">
+    <div class="gota" id="gota">
+      <div class="gota-icone">🏗️</div>
+      <p class="gota-titulo">Solte as fotos da obra aqui</p>
+      <p class="gota-sub">depois é só arrastar cada cartão para julgar</p>
+      <button class="botao-amarelo" id="btn-escolher">📷 Escolher fotos</button>
+      <div class="pasta-servidor">
+        <input id="input-pasta" placeholder="…ou uma pasta do servidor (ex.: imagens_modelo)" spellcheck="false">
+        <button id="btn-pasta">abrir</button>
+      </div>
+    </div>
+    <input type="file" id="input-fotos" multiple accept="image/*" hidden>
+  </section>
+
+  <!-- Estado 2: baralho de cartões (swipe) -->
+  <section id="tela-jogo" hidden>
+    <div class="progresso" id="progresso"></div>
+    <div class="pilha" id="pilha"></div>
+    <div class="acoes">
+      <button class="acao limpo" id="btn-limpo" title="Sem desperdício (←)">✔<small>limpo</small></button>
+      <button class="acao pular" id="btn-pular" title="Pular sem registrar (P)">⏭</button>
+      <button class="acao desperdicio" id="btn-desperdicio" title="É desperdício (→)">⚠<small>desperdício</small></button>
+    </div>
+    <p class="dica">arraste a foto para confirmar — ← limpo · → desperdício</p>
+  </section>
+
+  <!-- Estado 3: pilha concluída -->
+  <section id="tela-fim" hidden>
+    <div class="fim-caixa">
+      <div class="fim-icone">🧹</div>
+      <h2>Pilha concluída</h2>
+      <p id="fim-resumo"></p>
+      <button class="botao-amarelo" id="btn-mais">carregar mais fotos</button>
+    </div>
+  </section>
+</main>
+
+<div id="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

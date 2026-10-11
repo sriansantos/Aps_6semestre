@@ -27,6 +27,7 @@ import numpy as np
 from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 
+from .configuracao import DISTANCIA_PADRAO_M
 from .materiais import NOME_MATERIAIS
 from .visao import NOMES_CARACTERISTICAS, VERSAO_CARACTERISTICAS
 
@@ -69,6 +70,7 @@ class MemoriaExperiencias:
         os.makedirs(self.pasta_dados, exist_ok=True)
         conteudo = {
             "versao_caracteristicas": self.versao,
+            "distancia_padrao_m": DISTANCIA_PADRAO_M,
             "atualizado_em": datetime.now().isoformat(timespec="seconds"),
             "experiencias": self.experiencias,
         }
@@ -98,6 +100,7 @@ class MemoriaExperiencias:
             "probabilidade_sistema": round(float(probabilidade_sistema), 4),
             "sistema_acertou": bool(acertou),
             "observacao": observacao or "",
+            "distancia_m": DISTANCIA_PADRAO_M,  # captura padronizada (ver configuracao.py)
             "versao_caracteristicas": VERSAO_CARACTERISTICAS,
             "vetor": [round(float(x), 6) for x in vetor],
         }

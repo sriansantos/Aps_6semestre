@@ -17,6 +17,22 @@ previstas no roteiro da APS, funcionando 100% offline (sem APIs pagas).
 
 ## 1. Como instalar e rodar
 
+**Modo "swipe" (recomendado para a bancada de demonstração):**
+
+```bat
+executar.bat site
+```
+
+Abre no navegador o front-end web com cartões arrastáveis estilo Tinder
+(tema preto + amarelo de capacete de EPI): solte as fotos da obra, veja o
+veredito e a probabilidade **abaixo da foto**, e confirme arrastando o
+cartão — **→ direita = desperdício, ← esquerda = sem desperdício**. Um toque
+na foto alterna para a visão com as regiões detectadas contornadas. A
+distância de captura é padronizada em 5 m (parametrizada em
+`pivc_core/configuracao.py`, registrada nos metadados de cada experiência —
+não ocupa espaço na tela). Cada swipe vai para a mesma memória persistente
+dos outros modos e retreina o modelo.
+
 **Importante (Windows):** este computador tem mais de um Python instalado. Para
 não depender de qual Python o terminal escolhe, use sempre o **`executar.bat`** —
 ele cria e usa um ambiente virtual próprio do projeto (`.venv/`) na primeira
@@ -24,7 +40,7 @@ execução e garante que as bibliotecas certas sejam carregadas:
 
 ```bat
 executar.bat analisar "foto.jpg"      :: analisa uma imagem e pede confirmação
-executar.bat painel                   :: abre a interface gráfica (ou só dê 2 cliques no .bat)
+executar.bat painel                   :: interface gráfica de janela (Tkinter)
 executar.bat status                   :: estado da memória e do modelo
 ```
 
@@ -32,7 +48,7 @@ Alternativa manual (se preferir gerenciar o ambiente por conta própria):
 
 ```bash
 python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt     # ou: pip install opencv-python numpy scikit-learn pillow
+.venv\Scripts\pip install -r requirements.txt     # ou: pip install opencv-python numpy scikit-learn pillow flask
 .venv\Scripts\python main.py analisar "foto.jpg"
 ```
 
@@ -260,7 +276,10 @@ dados/
 
 ```
 pivc-desperdicio/
-├── main.py                  # CLI: analisar, adicionar, status, relatorio, painel, resetar
+├── main.py                  # CLI: analisar, adicionar, status, relatorio, painel, site, resetar
+├── webapp.py                # back-end Flask do front-end swipe (API JSON)
+├── templates/index.html     # página do modo swipe
+├── static/                  # estilo (tema preto + amarelo EPI) e lógica do baralho
 ├── gui.py                   # interface gráfica Tkinter (confirmação por botões)
 ├── executar.bat             # atalho Windows (cria/usa o ambiente virtual .venv)
 ├── pivc_core/
@@ -305,5 +324,5 @@ pivc-desperdicio/
 ## 7. Requisitos
 
 - Python 3.10+
-- `opencv-python`, `numpy`, `scikit-learn`, `pillow` (todas gratuitas)
+- `opencv-python`, `numpy`, `scikit-learn`, `pillow`, `flask` (todas gratuitas)
 - Funciona offline; nenhuma chave de API é necessária.

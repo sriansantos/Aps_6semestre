@@ -1,6 +1,7 @@
 {
   "versao_caracteristicas": 2,
-  "atualizado_em": "2026-09-27T19:38:06",
+  "distancia_padrao_m": 5.0,
+  "atualizado_em": "2026-10-11T15:02:13",
   "experiencias": [
     {
       "id": 1,

@@ -47,6 +47,9 @@ from .visao import (
 
 # Largura real presumida da cena (m) quando o operador não informa --largura-m.
 # Foto 2D não tem escala absoluta; este padrão é assumido e está indicado na saída.
+# Corresponde ao enquadramento típico na distância de captura padronizada
+# (DISTANCIA_PADRAO_M = 5 m, pivc_core/configuracao.py) — os dois parâmetros
+# descrevem a mesma padronização de coleta, por ângulos diferentes.
 LARGURA_PADRAO_M = 4.0
 
 
