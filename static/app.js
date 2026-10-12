@@ -155,9 +155,15 @@ function renderizar() {
 
 function preencherInfo(dados) {
   const cor = dados.desperdicio ? "amarelo" : "verde";
+  const linhaMateriais = (dados.materiais || [])
+    .slice(0, 3)
+    .map(m => `${m.nome} ~${String(m.area_m2).replace(".", ",")} m²`
+      + (m.montes > 1 ? ` (${m.montes} montes)` : ""))
+    .join(" · ");
   document.getElementById("info-cartao").innerHTML = `
     <div class="veredito ${cor}">${dados.rotulo_texto}</div>
     <div class="sub">${dados.probabilidade}% de probabilidade · confiança ${dados.confianca}</div>
+    ${linhaMateriais ? `<div class="regioes-linha">🔧 ${linhaMateriais}</div>` : ""}
     <div class="regioes-linha">📍 ${dados.n_regioes} região(ões) candidata(s) — a maior ocupa ${dados.maior_regiao}% da cena</div>
     <details>
       <summary>linha de pensamento do sistema</summary>

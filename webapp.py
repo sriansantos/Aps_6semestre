@@ -26,6 +26,7 @@ from urllib.parse import quote
 from flask import Flask, jsonify, render_template, request, send_file
 
 from pivc_core.detetor import DetetorDesperdicio
+from pivc_core.materiais import NOME_MATERIAIS
 from pivc_core.visao import carregar_imagem, nome_base_sem_acento
 
 PASTA_APP = os.path.dirname(os.path.abspath(__file__))
@@ -145,6 +146,15 @@ def api_analizar():
         "n_regioes": len(res.contornos),
         "maior_regiao": round(maior * 100),
         "raciocinio": res.raciocinio,
+        # identificação do tipo de material (materiais.py): o que é, quanto
+        # ocupa em m² e em quantos montes — exibidos abaixo da foto
+        "materiais": [
+            {"chave": m,
+             "nome": NOME_MATERIAIS.get(m, m.capitalize()),
+             "area_m2": round(area, 1),
+             "montes": res.aglomerados_por_material.get(m, 0)}
+            for m, area in sorted(res.areas_m2.items(), key=lambda kv: -kv[1])
+        ],
         "url_imagem": "/imagem?caminho=" + quote(chave),
         "url_anotada": "/imagem?caminho=" + quote(_abspath(cam_anotada)),
     })
