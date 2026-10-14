@@ -1,15 +1,19 @@
 @echo off
 rem ============================================================
-rem  PIVC - Detecção de Desperdício de Materiais em Obras
-rem  Executa o sistema sempre com o Python do ambiente virtual
-rem  do projeto (.venv), ignorando os outros Pythons do PC.
+rem  PIVC — Detecção de Desperdício de Materiais em Obras
 rem
-rem  Uso:   executar.bat <comando> [opções]
-rem  Ex.:   executar.bat analisar "foto.jpg"
-rem         executar.bat status
-rem  Sem comando = abre a interface gráfica (painel).
+rem  DOIS CLIQUES NESTE ARQUIVO = abre o front-end swipe no
+rem  navegador (tema preto/amarelo). Mantenha a janela preta
+rem  aberta enquanto estiver usando — ela é o servidor.
+rem
+rem  Comandos avançados (opcionais):
+rem    executar.bat analisar "foto.jpg"   analisa e pede confirmação no terminal
+rem    executar.bat painel                interface gráfica de janela (Tkinter)
+rem    executar.bat status                estado da memória e do modelo
+rem    executar.bat site --porta 8080     troca a porta do site
 rem ============================================================
 setlocal
+title PIVC — servidor web (mantenha esta janela aberta)
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
@@ -21,8 +25,12 @@ if not exist ".venv\Scripts\python.exe" (
 )
 
 if "%~1"=="" (
-    ".venv\Scripts\python.exe" main.py painel
+    ".venv\Scripts\python.exe" main.py site
 ) else (
     ".venv\Scripts\python.exe" main.py %*
 )
+
+echo.
+echo Servidor encerrado. Pressione uma tecla para fechar esta janela.
+pause >nul
 endlocal

@@ -19,6 +19,11 @@ previstas no roteiro da APS, funcionando 100% offline (sem APIs pagas).
 
 **Modo "swipe" (recomendado para a bancada de demonstração):**
 
+**Dois cliques no `executar.bat`** — abre o site no navegador sozinho
+(mantendo a janela preta do servidor aberta enquanto usa; se a porta padrão
+estiver ocupada, o sistema sobe na próxima livre automaticamente). Por linha
+de comando, o mesmo efeito é:
+
 ```bat
 executar.bat site
 ```

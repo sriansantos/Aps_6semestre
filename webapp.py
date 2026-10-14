@@ -189,7 +189,28 @@ def api_feedback():
 
 
 # ---------------------------------------------------------------------- #
+def _porta_livre(porta):
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as soquete:
+        try:
+            soquete.bind(("127.0.0.1", porta))
+            return True
+        except OSError:
+            return False
+
+
 def executar(porta=5000, abrir_navegador=True):
+    # Se a porta pedida estiver ocupada (outro PIVC aberto, outro programa),
+    # sobe na próxima livre — clique duplo nunca falha por porta.
+    for tentativa in range(10):
+        if _porta_livre(porta + tentativa):
+            porta += tentativa
+            break
+    else:
+        print(f"Nenhuma porta livre entre {porta} e {porta + 9}. "
+              f"Encerre outro PIVC aberto ou use --porta.")
+        return
     if abrir_navegador:
         threading.Timer(
             1.2, lambda: webbrowser.open(f"http://127.0.0.1:{porta}")
