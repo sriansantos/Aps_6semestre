@@ -9,15 +9,32 @@
 </head>
 <body>
 
-<header>
-  <div class="logo">🚧 PIVC <span>obra limpa</span></div>
+<!-- Estado 0: tela de login (Engenhender) -->
+<section id="tela-login">
+  <div class="login-caixa">
+    <div class="faixa-obra login-faixa" aria-hidden="true"></div>
+    <div class="login-logo">🚧 Engenhender</div>
+    <div class="login-tagline">aqui o match é com a economia</div>
+    <p class="login-sub">Detecção de desperdício de materiais em obras · PIVC</p>
+    <input id="input-nome" placeholder="seu nome" maxlength="60" autocomplete="off" spellcheck="false">
+    <button class="botao-amarelo" id="btn-entrar">entrar na obra</button>
+    <p class="login-nota">o nome só assina suas confirmações na memória do sistema</p>
+  </div>
+</section>
+
+<header hidden id="cabecalho">
+  <div class="logo">🚧 Engenhender <span>obra limpa</span></div>
   <div class="chip" id="chip-memoria">🧠 memória: <b>—</b></div>
 </header>
-<div class="faixa-obra" aria-hidden="true"></div>
+<div class="faixa-obra" id="faixa-topo" aria-hidden="true" hidden></div>
+<div class="barra-ferramentas" hidden id="barra-ferramentas">
+  <button class="ferramenta" id="btn-camera" title="Fotografar agora pela câmera">📷 <small>câmera</small></button>
+  <button class="ferramenta perigo" id="btn-limpar-ia" title="Apagar a memória e o modelo aprendido">🧹 <small>limpar IA</small></button>
+</div>
 
 <main>
   <!-- Estado 1: entrada de fotos -->
-  <section id="tela-entrada">
+  <section id="tela-entrada" hidden>
     <div class="gota" id="gota">
       <div class="gota-icone">🏗️</div>
       <p class="gota-titulo">Solte as fotos da obra aqui</p>
@@ -55,6 +72,32 @@
 </main>
 
 <div id="toast" hidden></div>
+
+<!-- Modal: câmera -->
+<div class="modal" id="modal-camera" hidden>
+  <div class="modal-caixa">
+    <div class="modal-titulo">📷 Câmera <button class="fechar" id="btn-fechar-camera">✕</button></div>
+    <video id="video-camera" autoplay playsinline muted></video>
+    <p class="camera-dica" id="camera-dica">aponte para a área da obra (padrão de 5 m) e capture</p>
+    <button class="botao-amarelo" id="btn-capturar" disabled>📸 capturar</button>
+  </div>
+</div>
+
+<!-- Modal: confirmar limpeza da IA -->
+<div class="modal" id="modal-limpar" hidden>
+  <div class="modal-caixa">
+    <div class="modal-titulo">🧹 Limpar a inteligência</div>
+    <p class="limpar-texto">Isso apaga <b>todas as experiências confirmadas</b> e o modelo
+      aprendido. O sistema volta ao conhecimento inicial (heurística) e recomeça
+      a aprender do zero.</p>
+    <p class="limper-pergunta" id="limpar-resumo"></p>
+    <div class="modal-botoes">
+      <button class="botao-cinza" id="btn-limpar-cancelar">cancelar</button>
+      <button class="botao-perigo" id="btn-limpar-confirmar">apagar tudo</button>
+    </div>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

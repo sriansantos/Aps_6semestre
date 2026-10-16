@@ -260,8 +260,6 @@ class DetetorDesperdicio:
         dist = np.linalg.norm(Xn - v, axis=1)
         k = min(5, len(X))
         idx = np.argsort(dist)[:k]
-        pesos = 1.0 / (1.0 + dist[idx])
-        votos = float((pesos * y[idx]).sum() / pesos.sum())
         casos = [
             {
                 "id": int(self.memoria.experiencias[i]["id"]),
@@ -271,6 +269,16 @@ class DetetorDesperdicio:
             }
             for i in idx
         ]
+        if float(dist[idx[0]]) < 0.5:
+            # Precedente exato (esta imagem já foi confirmada por humano):
+            # a memória já sabe a resposta — vizinhos distantes não afogam
+            # a confirmação anterior.
+            nivel = "exata"
+            votos = 0.98 if int(y[idx[0]]) == 1 else 0.02
+            return votos, casos, nivel
+
+        pesos = 1.0 / (1.0 + dist[idx])
+        votos = float((pesos * y[idx]).sum() / pesos.sum())
         d_media = float(dist[idx].mean())
         nivel = "forte" if d_media < 3.0 else ("média" if d_media < 6.0 else "fraca")
         return votos, casos, nivel
@@ -280,9 +288,15 @@ class DetetorDesperdicio:
 
         O peso da experiência aprendida cresce com o número de confirmações
         humanas (n/(n+6), teto 0.75); a heurística cede espaço aos poucos.
-        Analogia 'fraca' (nenhum caso realmente parecido na memória) reduz o
-        peso relativo da memória, que é redistribuído para o modelo — os
-        pesos somam sempre 1.0.
+
+        Confiança condicionada à qualidade da evidência:
+        • analogia 'fraca' (nenhum caso parecido) reduz o peso da memória E
+          do modelo — ambos extrapolam além do que foi confirmado;
+        • o modelo logístico só ganha confiança plena com volume de dados
+          (fator n/20): com poucas experiências ele é superconfiante e
+          frágil, e os casos (não paramétricos) são evidência mais segura;
+        • analogia 'exata' (precedente confirmado) domina a memória.
+        Os pesos somam sempre 1.0.
         """
         n = self.memoria.total
         w_aprend = min(0.75, n / (n + 6.0))
@@ -290,9 +304,15 @@ class DetetorDesperdicio:
 
         sinais = []  # (nome, probabilidade, peso_relativo)
         if p_mod is not None:
-            sinais.append(("modelo", p_mod, 1.0))
+            confianca_modelo = min(1.0, n / 20.0)
+            if nivel_analogia == "fraca":
+                confianca_modelo *= 0.5
+            sinais.append(("modelo", p_mod, confianca_modelo))
         if p_mem is not None:
-            sinais.append(("memoria", p_mem, 1.0 if nivel_analogia != "fraca" else 0.5))
+            if nivel_analogia == "exata":
+                sinais.append(("memoria", p_mem, 3.0))
+            else:
+                sinais.append(("memoria", p_mem, 1.0 if nivel_analogia != "fraca" else 0.5))
         if not sinais:
             return p_heur, {"heurística": 1.0}
 
@@ -487,11 +507,13 @@ class DetetorDesperdicio:
     # ------------------------------------------------------------------ #
     # Aprendizado com o humano
     # ------------------------------------------------------------------ #
-    def registrar_feedback(self, resultado, rotulo_humano, observacao="", material=None):
+    def registrar_feedback(self, resultado, rotulo_humano, observacao="", material=None,
+                           operador=None):
         """Registra a experiência confirmada pelo operador e consolida o
         aprendizado. `material` é o tipo de material confirmado/corrigido
         (chave de materiais.MATERIAIS) — alimente-o quando o rótulo for
-        DESPERDÍCIO; cenas limpas não têm material. Retorna
+        DESPERDÍCIO; cenas limpas não têm material. `operador` é o nome de
+        quem confirmou (front-end web, tela de login). Retorna
         (id_da_experiencia, sistema_acertou, consolidou)."""
         vetor = resultado.vetor
         if vetor is None:
@@ -505,6 +527,7 @@ class DetetorDesperdicio:
             observacao=observacao,
             vetor=vetor,
             material=material,
+            operador=operador,
         )
         X, y = self.memoria.matrizes()
         consolidou = self.modelo.consolidar(X, y)

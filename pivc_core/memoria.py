@@ -84,12 +84,13 @@ class MemoriaExperiencias:
     # Registro de experiências
     # ------------------------------------------------------------------ #
     def adicionar(self, caminho_imagem, rotulo, probabilidade_sistema, acertou, observacao, vetor,
-                  material=None):
+                  material=None, operador=None):
         """Registra uma experiência confirmada por humano. Retorna o id.
 
         `material` (chave de materiais.MATERIAIS) é opcional: cenas limpas não
         o têm; experiências antigas também não — o código usa .get() em todo
-        lugar que o consulta."""
+        lugar que o consulta. `operador` é o nome de quem confirmou (front-end
+        web, tela de login); nulo nos modos que não pedem identificação."""
         exp = {
             "id": (self.experiencias[-1]["id"] + 1) if self.experiencias else 1,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
@@ -97,6 +98,7 @@ class MemoriaExperiencias:
             "rotulo": int(rotulo),
             "rotulo_texto": NOME_ROTULOS[int(rotulo)],
             "material": material,
+            "operador": operador,
             "probabilidade_sistema": round(float(probabilidade_sistema), 4),
             "sistema_acertou": bool(acertou),
             "observacao": observacao or "",

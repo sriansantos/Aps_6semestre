@@ -1,13 +1,17 @@
 """
-webapp.py — Front-end web do PIVC com "swipe" estilo Tinder.
+webapp.py — Front-end web do PIVC com "swipe" estilo Tinder (Engenhender).
 
-O operador solta as fotos da obra na página; para cada foto o sistema mostra
-o veredito, a probabilidade e a linha de pensamento ABAIXO da foto, e a
-confirmação humana é feita ARRASTANDO o cartão:
+O operador faz login (apenas o nome — é identificação de quem confirma, não
+segurança), solta as fotos da obra ou fotografa pela câmera; para cada foto o
+sistema mostra o veredito, a probabilidade e a linha de pensamento ABAIXO da
+foto, e a confirmação humana é feita ARRASTANDO o cartão:
   → arrastar para a DIREITA  =  "é desperdício"
   → arrastar para a ESQUERDA =  "sem desperdício (local limpo)"
 Cada swipe vai para a memória persistente e retreina o modelo — igual aos
 outros modos (CLI e painel), agora com o gesto do Tinder.
+
+Há ainda o botão "limpar inteligência" (apaga memória + modelo aprendido,
+voltando ao conhecimento a priori da heurística).
 
 Tema visual: preto + amarelo de capacete de EPI de obra.
 
@@ -21,12 +25,13 @@ import os
 import threading
 import uuid
 import webbrowser
+from datetime import datetime
 from urllib.parse import quote
 
-from flask import Flask, jsonify, render_template, request, send_file
+from flask import Flask, jsonify, render_template, request, send_file, session
 
 from pivc_core.detetor import DetetorDesperdicio
-from pivc_core.materiais import NOME_MATERIAIS
+from pivc_core.materiais import CORES_MATERIAIS, MATERIAIS, NOME_MATERIAIS
 from pivc_core.visao import carregar_imagem, nome_base_sem_acento
 
 PASTA_APP = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +40,9 @@ PASTA_UPLOADS = os.path.join(PASTA_DADOS, "capturas")
 EXTENSOES = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 
 app = Flask(__name__)
+# Chave de sessão estável: o "login" do Engenhender guarda o nome do operador
+# na sessão do navegador apenas para assinar as confirmações na memória.
+app.secret_key = "engenhender-pivc-local"
 detetor = DetetorDesperdicio(PASTA_DADOS)
 
 # Caminhos liberados nesta sessão (só analisa/serva o que entrou pela API —
@@ -78,6 +86,81 @@ def imagem():
 @app.route("/api/status")
 def api_status():
     return jsonify(detetor.status())
+
+
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    """Login do Engenhender: registra o nome do operador na sessão.
+    Não é controle de acesso — é a assinatura de quem confirma, gravada em
+    cada experiência da memória (auditável no relatório)."""
+    nome = (request.get_json(silent=True) or {}).get("nome", "").strip()
+    if not nome or len(nome) > 60:
+        return jsonify({"erro": "informe um nome válido (até 60 caracteres)"}), 400
+    session["operador"] = nome
+    return jsonify({"ok": True, "nome": nome})
+
+
+@app.route("/api/sair", methods=["POST"])
+def api_sair():
+    session.pop("operador", None)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/materiais")
+def api_materiais():
+    """Catálogo de materiais para o front-end: nome bonito + cor (RGB web)
+    de cada ponto de cor nos cartões."""
+    catalogo = []
+    for chave in MATERIAIS:
+        b, g, r = CORES_MATERIAIS[chave]
+        catalogo.append({
+            "chave": chave,
+            "nome": NOME_MATERIAIS[chave],
+            "cor": f"#{r:02x}{g:02x}{b:02x}",
+        })
+    return jsonify(catalogo)
+
+
+@app.route("/api/captura", methods=["POST"])
+def api_captura():
+    """Recebe um quadro fotografado pela câmera do navegador (dataURL JPEG).
+    Igual ao botão 'Capturar da câmera' do painel Tkinter, agora na web."""
+    dados = (request.get_json(silent=True) or {}).get("quadro", "")
+    if not dados.startswith("data:image/"):
+        return jsonify({"erro": "quadro de câmera inválido"}), 400
+    try:
+        import base64
+
+        bruto = base64.b64decode(dados.split(",", 1)[1])
+    except (ValueError, IndexError):
+        return jsonify({"erro": "quadro de câmera ilegível"}), 400
+
+    os.makedirs(PASTA_UPLOADS, exist_ok=True)
+    destino = os.path.join(
+        PASTA_UPLOADS,
+        f"captura_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:4]}.jpg",
+    )
+    with open(destino, "wb") as f:
+        f.write(bruto)
+    try:
+        carregar_imagem(destino)  # valida de verdade antes de aceitar
+    except (ValueError, OSError):
+        os.remove(destino)
+        return jsonify({"erro": "não foi possível decodificar a foto capturada"}), 400
+    _liberar(destino)
+    return jsonify({"adicionadas": [destino]})
+
+
+@app.route("/api/limpar_inteligencia", methods=["POST"])
+def api_limpar_inteligencia():
+    """Apaga TODA a memória de experiências e o modelo aprendido (com dupla
+    confirmação no front-end). O sistema volta ao conhecimento a priori da
+    heurística de engenharia e volta a aprender com as confirmações."""
+    if (request.get_json(silent=True) or {}).get("confirmar") != "APAGAR":
+        return jsonify({"erro": "confirmação ausente"}), 400
+    detetor.resetar()
+    RESULTADOS.clear()
+    return jsonify({"ok": True, "status": detetor.status()})
 
 
 @app.route("/api/carregar", methods=["POST"])
@@ -147,12 +230,14 @@ def api_analizar():
         "maior_regiao": round(maior * 100),
         "raciocinio": res.raciocinio,
         # identificação do tipo de material (materiais.py): o que é, quanto
-        # ocupa em m² e em quantos montes — exibidos abaixo da foto
+        # ocupa em m², em quantos montes e a COR de anotação — exibidos
+        # abaixo da foto como pontos coloridos
         "materiais": [
             {"chave": m,
              "nome": NOME_MATERIAIS.get(m, m.capitalize()),
              "area_m2": round(area, 1),
-             "montes": res.aglomerados_por_material.get(m, 0)}
+             "montes": res.aglomerados_por_material.get(m, 0),
+             "cor": "#{:02x}{:02x}{:02x}".format(*reversed(CORES_MATERIAIS.get(m, (200, 200, 200))))}
             for m, area in sorted(res.areas_m2.items(), key=lambda kv: -kv[1])
         ],
         "url_imagem": "/imagem?caminho=" + quote(chave),
@@ -178,7 +263,11 @@ def api_feedback():
             return jsonify({"erro": str(erro)}), 400
         RESULTADOS[chave] = res
 
-    exp_id, acertou, consolidou = detetor.registrar_feedback(res, int(rotulo))
+    exp_id, acertou, consolidou = detetor.registrar_feedback(
+        res, int(rotulo),
+        material=dados.get("material"),          # confirma/corrige o tipo
+        operador=session.get("operador"),        # quem confirmou (login)
+    )
     return jsonify({
         "ok": True,
         "exp_id": exp_id,
@@ -189,7 +278,14 @@ def api_feedback():
 
 
 # ---------------------------------------------------------------------- #
+# Portas que os navegadores (Chromium) recusam carregar mesmo livres —
+# o fallback precisa pulá-las junto com as ocupadas.
+PORTAS_BLOQUEADAS = {5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6697, 10080}
+
+
 def _porta_livre(porta):
+    if porta in PORTAS_BLOQUEADAS:
+        return False
     import socket
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as soquete:

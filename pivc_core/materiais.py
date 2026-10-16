@@ -5,24 +5,34 @@ Para cada região candidata a entulho (contorno devolvido pelo pipeline de
 visão), mede-se a cor e a textura DENTRO dela e compara-se com assinaturas
 visuais por material:
 
-  • papelão    — tons terrosos com textura fibrosa moderada
+  • papelao    — tons terrosos com textura fibrosa moderada
   • madeira    — tons terrosos com muitos bordos internos (veios, tábuas)
   • gesso      — quase branco, pouco saturado e claro
   • plástico   — cores vibrantes com superfície lisa (lonas, embalagens)
   • alvenaria  — cinza concreto, regiões grandes e irregulares
+  • tijolo     — vermelho-cerâmico saturado (tijolos, telhas, lajotas)
+  • metal      — cinza-brilhante especular e liso (tubos, perfis, chapas)
   • outro      — nenhuma assinatura supera o limiar de confiança
 
-A assinatura é uma soma ponderada de indicadores interpretáveis — mesma
-filosofia da heurística de engenharia do detetor: cada classificação pode ser
-explicada com números. E, como no resto do sistema, o operador confirma ou
-corrige o material na hora do feedback; a memória de casos (detetor.py) usa
-essas confirmações para votar pelo material de imagens parecidas.
+CADASTRO DE NOVOS MATERIAIS — para registrar um material novo basta tocar em
+5 pontos deste arquivo:
+  1. tupla MATERIAIS (abaixo);
+  2. nome bonito em NOME_MATERIAIS;
+  3. cor de anotação em CORES_MATERIAIS (BGR) — usada na imagem-relatório e
+     nos pontos de cor do cartão no front-end web;
+  4. um indicador de cor NOVO em _medidas_regiao (uma fração de pixels na
+     faixa de matiz/saturação/brilho que caracteriza o material);
+  5. a assinatura ponderada em _pontuar (pesos somando 1) + tecla em
+     CHAVES_CLI, se quiser confirmá-lo pelo terminal.
+Como no resto do sistema, o operador confirma/corrige o material na hora do
+feedback e a memória de casos (detetor.py) usa essas confirmações para votar
+pelo material de imagens parecidas.
 """
 
 import cv2
 import numpy as np
 
-MATERIAIS = ("papelao", "madeira", "gesso", "plastico", "alvenaria", "outro")
+MATERIAIS = ("papelao", "madeira", "gesso", "plastico", "alvenaria", "tijolo", "metal", "outro")
 
 NOME_MATERIAIS = {
     "papelao": "Papelão",
@@ -30,6 +40,8 @@ NOME_MATERIAIS = {
     "gesso": "Gesso/Drywall",
     "plastico": "Plástico/Lonas",
     "alvenaria": "Entulho de alvenaria",
+    "tijolo": "Tijolo/Cerâmica",
+    "metal": "Metal/Tubos",
     "outro": "Outro material",
 }
 
@@ -40,17 +52,21 @@ CORES_MATERIAIS = {
     "gesso": (0, 235, 255),        # amarelo claro (visível sobre gesso branco)
     "plastico": (255, 0, 255),     # magenta
     "alvenaria": (255, 160, 0),    # azul claro (cinza some no concreto)
+    "tijolo": (60, 60, 225),       # vermelho-cerâmico
+    "metal": (200, 150, 80),       # azul-aço
     "outro": (200, 200, 200),      # cinza
 }
 
 # Chaves da pergunta de material no terminal: [g]esso, [p]apelão, [m]adeira,
-# [l]onas/plástico, [a]lvenaria, [o]utro.
+# [l]onas/plástico, [a]lvenaria, [t]ijolo, m[e]tal, [o]utro.
 CHAVES_CLI = {
     "g": "gesso",
     "p": "papelao",
     "m": "madeira",
     "l": "plastico",
     "a": "alvenaria",
+    "t": "tijolo",
+    "e": "metal",
     "o": "outro",
 }
 
@@ -106,6 +122,9 @@ def _medidas_regiao(hsv, edges, contorno):
         "fracao_clara": fracao((v >= 170) & (s < 70)),
         "fracao_cinza_media": fracao((s < 45) & (v > 80) & (v < 170)),
         "fracao_vibrante": fracao(s > 120),
+        # --- materiais cadastrados depois (ver docstring do módulo) ---
+        "fracao_vermelha": fracao(((h <= 12) | (h >= 170)) & (s >= 90) & (v >= 50)),
+        "fracao_metal": fracao((v >= 200) & (s < 60)),
         "densidade_bordas_interna": float(((edges > 0) & nucleo).sum() / max(int(nucleo.sum()), 1)),
     }
 
@@ -136,10 +155,11 @@ def _pontuar(metadados, m):
         "gesso": (
             0.55 * _ramp(m["fracao_clara"], 0.15, 0.40)
             + 0.25 * (1.0 - _ramp(m["sat_media"], 25, 80))
-            + 0.20 * _ramp(m["brilho_medio"], 140, 190)
+            + 0.20 * (1.0 - _ramp(m["fracao_metal"], 0.30, 0.70))
         ),
         "plastico": (
-            0.60 * _ramp(m["fracao_vibrante"], 0.10, 0.40)
+            # vibrante FORA da faixa vermelho-cerâmica (que é do tijolo)
+            0.60 * _ramp(max(0.0, m["fracao_vibrante"] - m["fracao_vermelha"]), 0.10, 0.40)
             + 0.25 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.03, 0.12))
             + 0.15 * (1.0 - _ramp(marrom_total, 0.30, 0.60))
         ),
@@ -147,6 +167,22 @@ def _pontuar(metadados, m):
             0.60 * _ramp(m["fracao_cinza_media"], 0.25, 0.55)
             + 0.20 * _ramp(metadados["irregularidade"], 1.5, 4.0)
             + 0.20 * (1.0 - _ramp(m["sat_media"], 45, 90))
+        ),
+        # Tijolo/cerâmica: vermelho-cerâmico dominante. O termo de matiz
+        # penaliza o marrom do papelão (matiz 0.08-0.25) — tijolo é matiz
+        # ~0.00-0.07 com saturação alta.
+        "tijolo": (
+            0.60 * _ramp(m["fracao_vermelha"], 0.15, 0.45)
+            + 0.20 * _ramp(m["sat_media"], 90, 140)
+            + 0.20 * (1.0 - _ramp(m["matiz_media"], 0.10, 0.25))
+        ),
+        # Metal/tubos: brilho especular (muito claro, quase sem cor) em
+        # superfície lisa. Diferencia do gesso pelo teto de brilho (V>=200)
+        # e pela textura interna baixa (chapa lisa x gesso quebrado).
+        "metal": (
+            0.50 * _ramp(m["fracao_metal"], 0.20, 0.55)
+            + 0.25 * _ramp(m["brilho_medio"], 170, 220)
+            + 0.25 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.03, 0.10))
         ),
     }
 

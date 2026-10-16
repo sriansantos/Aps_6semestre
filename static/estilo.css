@@ -15,6 +15,9 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* o atributo hidden vence qualquer display definido por classe/id */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--fundo);
@@ -56,6 +59,136 @@ header {
 }
 
 main { max-width: 460px; margin: 0 auto; padding: 0 14px 34px; }
+
+/* ---------- tela de login (Engenhender) ---------- */
+#tela-login {
+  min-height: calc(100vh - 40px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.login-caixa {
+  width: min(92vw, 380px);
+  background: var(--carta);
+  border: 1px solid var(--carta-borda);
+  border-radius: 28px;
+  box-shadow: var(--sombra);
+  text-align: center;
+  padding: 0 0 30px;
+  overflow: hidden;
+}
+.login-faixa { margin: 0 0 26px; max-width: none; }
+.login-logo {
+  font-size: 2.1rem;
+  font-weight: 900;
+  letter-spacing: .5px;
+}
+.login-tagline {
+  color: var(--amarelo);
+  font-weight: 700;
+  font-style: italic;
+  margin-top: 2px;
+}
+.login-sub { color: var(--cinza); font-size: .8rem; margin: 10px 0 22px; }
+#input-nome {
+  display: block;
+  width: min(80%, 280px);
+  margin: 0 auto 14px;
+  background: #141414;
+  border: 1px solid var(--carta-borda);
+  color: var(--texto);
+  border-radius: 999px;
+  padding: 13px 18px;
+  font-size: 1rem;
+  text-align: center;
+}
+#input-nome:focus { outline: 2px solid var(--amarelo-escuro); }
+.login-nota { color: #5c5c5c; font-size: .68rem; margin-top: 14px; }
+
+/* ---------- barra de ferramentas ---------- */
+.barra-ferramentas {
+  max-width: 460px;
+  margin: 0 auto 14px;
+  padding: 0 14px;
+  display: flex;
+  gap: 8px;
+}
+.ferramenta {
+  flex: 1;
+  background: #151515;
+  border: 1px solid var(--carta-borda);
+  color: var(--texto);
+  border-radius: 12px;
+  padding: 9px 6px;
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1.1;
+}
+.ferramenta small { display: block; font-size: .62rem; color: var(--cinza); margin-top: 3px; }
+.ferramenta.perigo { color: #ff8f8f; }
+.ferramenta:active { background: #1f1f1f; }
+
+/* ---------- modais (câmera / limpar IA) ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  padding: 18px;
+}
+.modal-caixa {
+  width: min(94vw, 420px);
+  background: var(--carta);
+  border: 1px solid var(--carta-borda);
+  border-radius: 22px;
+  padding: 16px;
+  box-shadow: var(--sombra);
+}
+.modal-titulo {
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.modal-titulo .fechar {
+  background: none;
+  border: none;
+  color: var(--cinza);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+#video-camera {
+  width: 100%;
+  border-radius: 14px;
+  background: #000;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  transform: scaleX(-1); /* espelhado, como esperamos ao apontar */
+}
+.camera-dica { color: var(--cinza); font-size: .76rem; margin: 10px 0 12px; }
+.modal-caixa .botao-amarelo { display: block; margin: 0 auto; }
+.limpar-texto { color: var(--cinza); font-size: .86rem; line-height: 1.45; }
+#limpar-resumo { color: var(--amarelo); font-size: .8rem; }
+.modal-botoes { display: flex; gap: 10px; margin-top: 16px; }
+.modal-botoes button { flex: 1; border-radius: 999px; padding: 11px; font-weight: 700; cursor: pointer; border: none; }
+.botao-cinza { background: #262626; color: var(--texto); }
+.botao-perigo { background: #e53935; color: #fff; }
+
+/* ---------- pontos de cor dos materiais ---------- */
+.ponto-cor {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 1px solid rgba(255, 255, 255, .35);
+}
 
 /* ---------- entrada de fotos ---------- */
 .gota {

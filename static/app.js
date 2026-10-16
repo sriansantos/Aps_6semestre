@@ -1,10 +1,16 @@
 /* ============================================================
-   PIVC — lógica do baralho estilo Tinder
+   Engenhender — PIVC com "swipe" estilo Tinder
    arrastar →  direita = DESPERDÍCIO · esquerda = SEM DESPERDÍCIO
    ============================================================ */
 "use strict";
 
 const el = {
+  login: () => document.getElementById("tela-login"),
+  cabecalho: () => document.getElementById("cabecalho"),
+  faixaTopo: () => document.getElementById("faixa-topo"),
+  barra: () => document.getElementById("barra-ferramentas"),
+  inputNome: () => document.getElementById("input-nome"),
+  btnEntrar: () => document.getElementById("btn-entrar"),
   entrada: () => document.getElementById("tela-entrada"),
   jogo: () => document.getElementById("tela-jogo"),
   fim: () => document.getElementById("tela-fim"),
@@ -19,13 +25,28 @@ const el = {
   chip: () => document.getElementById("chip-memoria"),
   toast: () => document.getElementById("toast"),
   fimResumo: () => document.getElementById("fim-resumo"),
+  // câmera
+  modalCamera: () => document.getElementById("modal-camera"),
+  video: () => document.getElementById("video-camera"),
+  btnCamera: () => document.getElementById("btn-camera"),
+  btnCapturar: () => document.getElementById("btn-capturar"),
+  btnFecharCamera: () => document.getElementById("btn-fechar-camera"),
+  cameraDica: () => document.getElementById("camera-dica"),
+  // limpar IA
+  modalLimpar: () => document.getElementById("modal-limpar"),
+  btnLimpar: () => document.getElementById("btn-limpar-ia"),
+  btnLimparCancelar: () => document.getElementById("btn-limpar-cancelar"),
+  btnLimparConfirmar: () => document.getElementById("btn-limpar-confirmar"),
+  limparResumo: () => document.getElementById("limpar-resumo"),
 };
 
+let operador = null;
 let fila = [];              // {caminho, dados, decidido, rotulo}
 let indice = 0;             // cartão atual
 let registradasSessao = 0;  // confirmações nesta sessão
 let tokenRender = 0;        // invalida preenchimentos atrasados
 let arraste = null;
+let fluxoCamera = null;     // MediaStream da câmera aberta
 
 /* ---------------- utilidades ---------------- */
 async function api(rota, opcoes) {
@@ -157,7 +178,8 @@ function preencherInfo(dados) {
   const cor = dados.desperdicio ? "amarelo" : "verde";
   const linhaMateriais = (dados.materiais || [])
     .slice(0, 3)
-    .map(m => `${m.nome} ~${String(m.area_m2).replace(".", ",")} m²`
+    .map(m => `<span class="ponto-cor" style="background:${m.cor}"></span>${m.nome}
+      ~${String(m.area_m2).replace(".", ",")} m²`
       + (m.montes > 1 ? ` (${m.montes} montes)` : ""))
     .join(" · ");
   document.getElementById("info-cartao").innerHTML = `
@@ -264,8 +286,126 @@ function pular() {
   setTimeout(renderizar, 290);
 }
 
+/* ---------------- login (Engenhender) ---------------- */
+async function entrar() {
+  const nome = el.inputNome().value.trim();
+  if (!nome) { el.inputNome().focus(); return; }
+  try {
+    await api("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome }),
+    });
+    operador = nome;
+    el.login().hidden = true;
+    el.cabecalho().hidden = false;
+    el.faixaTopo().hidden = false;
+    el.barra().hidden = false;
+    el.entrada().hidden = false;
+    api("/api/status").then(atualizarChip).catch(() => {});
+    toast(`bem-vindo(a) à obra, ${nome.split(" ")[0]}!`);
+  } catch (e) { toast(e.message, true); }
+}
+
+/* ---------------- câmera ---------------- */
+async function abrirCamera() {
+  el.modalCamera().hidden = false;
+  el.btnCapturar().disabled = true;
+  el.cameraDica().textContent = "abrindo a câmera…";
+  try {
+    fluxoCamera = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment", width: { ideal: 1280 } },
+      audio: false,
+    });
+    el.video().srcObject = fluxoCamera;
+    el.btnCapturar().disabled = false;
+    el.cameraDica().textContent = "aponte para a área da obra (padrão de 5 m) e capture";
+  } catch (erro) {
+    el.cameraDica().textContent =
+      "não foi possível abrir a câmera — verifique permissões ou use outro navegador";
+  }
+}
+
+function fecharCamera() {
+  if (fluxoCamera) { fluxoCamera.getTracks().forEach(t => t.stop()); fluxoCamera = null; }
+  el.modalCamera().hidden = true;
+}
+
+async function capturar() {
+  const video = el.video();
+  if (!video.videoWidth) return;
+  const tela = document.createElement("canvas");
+  tela.width = video.videoWidth;
+  tela.height = video.videoHeight;
+  const ctx = tela.getContext("2d");
+  ctx.translate(tela.width, 0);        // grava espelhado, igual ao preview
+  ctx.scale(-1, 1);
+  ctx.drawImage(video, 0, 0);
+  const quadro = tela.toDataURL("image/jpeg", 0.92);
+  try {
+    const r = await api("/api/captura", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quadro }),
+    });
+    fecharCamera();
+    toast("foto capturada — analisando…");
+    iniciarFila(r.adicionadas);
+  } catch (e) { toast("falha na captura: " + e.message, true); }
+}
+
+/* ---------------- limpar a inteligência ---------------- */
+async function abrirLimpar() {
+  try {
+    const s = await api("/api/status");
+    el.limparResumo().textContent =
+      `memória atual: ${s.total} experiência(s) (${s.desperdicio} desperdício / ` +
+      `${s.limpo} limpo)` + (s.taxa_acerto === null ? "" :
+        ` · taxa de acerto até aqui: ${Math.round(s.taxa_acerto * 100)}%`);
+  } catch (e) { el.limparResumo().textContent = ""; }
+  el.btnLimparConfirmar().textContent = "apagar tudo";
+  el.btnLimparConfirmar().dataset.armado = "";
+  el.modalLimpar().hidden = false;
+}
+
+async function confirmarLimpar() {
+  const botao = el.btnLimparConfirmar();
+  if (!botao.dataset.armado) {          // dupla confirmação
+    botao.dataset.armado = "1";
+    botao.textContent = "tenho certeza — APAGAR";
+    return;
+  }
+  try {
+    const r = await api("/api/limpar_inteligencia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirmar: "APAGAR" }),
+    });
+    el.modalLimpar().hidden = true;
+    atualizarChip(r.status);
+    fila = []; indice = 0; registradasSessao = 0;
+    el.jogo().hidden = true; el.fim().hidden = true; el.entrada().hidden = false;
+    toast("memória e modelo apagados — o sistema recomeçou do zero");
+  } catch (e) { toast(e.message, true); }
+}
+
 /* ---------------- ligações da página ---------------- */
 document.addEventListener("DOMContentLoaded", () => {
+  // login
+  el.btnEntrar().addEventListener("click", entrar);
+  el.inputNome().addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
+  el.inputNome().focus();
+
+  // câmera
+  el.btnCamera().addEventListener("click", abrirCamera);
+  el.btnCapturar().addEventListener("click", capturar);
+  el.btnFecharCamera().addEventListener("click", fecharCamera);
+
+  // limpar IA
+  el.btnLimpar().addEventListener("click", abrirLimpar);
+  el.btnLimparCancelar().addEventListener("click", () => { el.modalLimpar().hidden = true; });
+  el.btnLimparConfirmar().addEventListener("click", confirmarLimpar);
+
   el.btnEscolher().addEventListener("click", () => el.inputFotos().click());
   el.inputFotos().addEventListener("change", (e) => carregarUploads(e.target.files));
   el.btnPasta().addEventListener("click", () => carregarPasta(el.inputPasta().value.trim()));
@@ -281,6 +421,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-pular").addEventListener("click", pular);
 
   document.addEventListener("keydown", (e) => {
+    if (!el.login().hidden || !el.modalCamera().hidden || !el.modalLimpar().hidden) return;
     if (el.jogo().hidden) return;
     if (e.key === "ArrowLeft") decidir(0);
     else if (e.key === "ArrowRight") decidir(1);
@@ -296,7 +437,4 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("drop", (e) => {
     if (e.dataTransfer?.files?.length) carregarUploads(e.dataTransfer.files);
   });
-
-  api("/api/status").then(atualizarChip).catch(() =>
-    toast("Servidor PIVC não responde — rode: python main.py site", true));
 });

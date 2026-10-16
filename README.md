@@ -140,13 +140,45 @@ Cada análise gera também uma **imagem-relatório anotada** em
 
 ### Captura pela câmera (imagem inserida na hora)
 
-Na interface gráfica, o botão **📸 Capturar da câmera** abre uma janela com
-**pré-visualização ao vivo**: enquadre a área da obra, clique em *Capturar*
-(ou barra de espaço) e a foto vai direto para a análise, sem precisar gravar
-arquivo antes e procurá-lo no explorador. A imagem capturada fica em
-`dados/capturas/` e entra no mesmo fluxo de confirmação humana. Isso atende
-à aquisição por **câmera** prevista no roteiro da APS ("arquivos de imagem
-ou vídeo… ou câmera").
+No **site (Engenhender)**, o botão **📷 câmera** da barra de ferramentas abre
+um modal com **pré-visualização ao vivo** (câmera do próprio navegador):
+enquadre a área da obra no padrão de 5 m e clique em *capturar* — a foto vai
+direto para a pilha de cartões, sem passar por arquivo ou explorador. Na
+interface Tkinter há o equivalente **📸 Capturar da câmera**. A imagem fica
+em `dados/capturas/` e entra no mesmo fluxo de confirmação humana. Isso
+atende à aquisição por **câmera** prevista no roteiro da APS ("arquivos de
+imagem ou vídeo… ou câmera").
+
+### Login "Engenhender"
+
+Ao abrir o site, a tela de login pede apenas o **nome do operador** — não é
+controle de acesso, é a assinatura de quem confirma: cada experiência gravada
+na memória carrega o campo `operador`, deixando o histórico auditável por
+pessoa (relatórios). A tagline do produto: *"aqui o match é com a economia"*.
+
+### Limpar a inteligência do modelo
+
+O botão **🧹 limpar IA** da barra de ferramentas abre um modal com o resumo
+do que será apagado e **confirmação em duas etapas**. Confirmado, apaga todas
+as experiências da memória e o modelo aprendido — o sistema volta ao
+conhecimento a priori (heurística de engenharia) e recomeça a aprender do
+zero com as próximas confirmações. Equivalente no terminal:
+`python main.py resetar`.
+
+### Materiais identificados (e como cadastrar mais)
+
+| Material | Assinatura visual | Cor |
+|---|---|---|
+| Papelão | marrom empoeirado + textura fibrosa | marrom |
+| Madeira | marrom saturado + bordas internas (veios) | laranja |
+| Gesso/Drywall | claro, pouco saturado | amarelo claro |
+| Plástico/Lonas | cores vibrantes, superfície lisa | magenta |
+| Entulho de alvenaria | cinza médio dominante + irregular | azul claro |
+| **Tijolo/Cerâmica** | vermelho-cerâmico saturado | vermelho |
+| **Metal/Tubos** | brilho especular + superfície lisa | azul-aço |
+
+O passo a passo para cadastrar novos materiais (5 pontos do arquivo) está
+documentado no topo de `pivc_core/materiais.py`.
 
 ---
 
