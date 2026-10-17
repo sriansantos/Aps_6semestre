@@ -32,6 +32,8 @@ const el = {
   btnCapturar: () => document.getElementById("btn-capturar"),
   btnFecharCamera: () => document.getElementById("btn-fechar-camera"),
   cameraDica: () => document.getElementById("camera-dica"),
+  btnSair: () => document.getElementById("btn-sair"),
+  nomeOperador: () => document.getElementById("nome-operador"),
   // limpar IA
   modalLimpar: () => document.getElementById("modal-limpar"),
   btnLimpar: () => document.getElementById("btn-limpar-ia"),
@@ -297,6 +299,7 @@ async function entrar() {
       body: JSON.stringify({ nome }),
     });
     operador = nome;
+    el.nomeOperador().textContent = nome.split(" ")[0];
     el.login().hidden = true;
     el.cabecalho().hidden = false;
     el.faixaTopo().hidden = false;
@@ -305,6 +308,17 @@ async function entrar() {
     api("/api/status").then(atualizarChip).catch(() => {});
     toast(`bem-vindo(a) à obra, ${nome.split(" ")[0]}!`);
   } catch (e) { toast(e.message, true); }
+}
+
+async function sair() {
+  try { await api("/api/sair", { method: "POST" }); } catch (e) { /* sessão local de qualquer forma */ }
+  operador = null;
+  fila = []; indice = 0; registradasSessao = 0;
+  el.jogo().hidden = true; el.fim().hidden = true; el.entrada().hidden = true;
+  el.barra().hidden = true; el.faixaTopo().hidden = true; el.cabecalho().hidden = true;
+  el.login().hidden = false;
+  el.inputNome().value = "";
+  el.inputNome().focus();
 }
 
 /* ---------------- câmera ---------------- */
@@ -391,10 +405,11 @@ async function confirmarLimpar() {
 
 /* ---------------- ligações da página ---------------- */
 document.addEventListener("DOMContentLoaded", () => {
-  // login
+  // login / sair
   el.btnEntrar().addEventListener("click", entrar);
   el.inputNome().addEventListener("keydown", (e) => { if (e.key === "Enter") entrar(); });
   el.inputNome().focus();
+  el.btnSair().addEventListener("click", sair);
 
   // câmera
   el.btnCamera().addEventListener("click", abrirCamera);

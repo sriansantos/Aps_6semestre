@@ -48,6 +48,30 @@ header {
 }
 .chip b { color: var(--amarelo); }
 
+/* lado direito do cabeçalho: chip da memória + botão sair */
+.lado-direito { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.botao-sair {
+  background: #171717;
+  border: 1px solid var(--carta-borda);
+  color: var(--texto);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: .74rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.botao-sair small {
+  color: var(--amarelo);
+  font-weight: 700;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.botao-sair:hover { border-color: var(--amarelo-escuro); }
+
 /* fita de sinalização de obra */
 .faixa-obra {
   height: 10px;
