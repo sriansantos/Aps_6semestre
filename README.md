@@ -169,13 +169,19 @@ zero com as próximas confirmações. Equivalente no terminal:
 
 | Material | Assinatura visual | Cor |
 |---|---|---|
-| Papelão | marrom empoeirado + textura fibrosa | marrom |
-| Madeira | marrom saturado + bordas internas (veios) | laranja |
+| Papelão | marrom empoeirado + textura fibrosa moderada | marrom |
+| Madeira | marrom saturado + bordas internas moderadas (veios) | laranja |
 | Gesso/Drywall | claro, pouco saturado | amarelo claro |
-| Plástico/Lonas | cores vibrantes, superfície lisa | magenta |
+| Plástico/Lonas | cores vibrantes fora do vermelho, superfície lisa | magenta |
 | Entulho de alvenaria | cinza médio dominante + irregular | azul claro |
-| **Tijolo/Cerâmica** | vermelho-cerâmico saturado | vermelho |
+| **Tijolo/Telha** | vermelho-cerâmico saturado | vermelho |
 | **Metal/Tubos** | brilho especular + superfície lisa | azul-aço |
+| **Cerâmica/Revestimento** | bege/creme polido, textura baixa | salmão-claro |
+| **Vidro** | reflexo especular com borda/tom esverdeado | verde-água |
+| **Areia/Agregado** | granulado denso (textura altíssima) em tom bege | cáqui claro |
+
+(7 materiais reais + "outro". Papelão, madeira e areia se separam pelo GRÃO
+da textura: veios moderados = madeira, granulado denso = areia.)
 
 O passo a passo para cadastrar novos materiais (5 pontos do arquivo) está
 documentado no topo de `pivc_core/materiais.py`.

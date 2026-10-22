@@ -10,8 +10,11 @@ visuais por material:
   • gesso      — quase branco, pouco saturado e claro
   • plástico   — cores vibrantes com superfície lisa (lonas, embalagens)
   • alvenaria  — cinza concreto, regiões grandes e irregulares
-  • tijolo     — vermelho-cerâmico saturado (tijolos, telhas, lajotas)
+  • tijolo     — vermelho-cerâmico saturado (tijolos, telhas)
   • metal      — cinza-brilhante especular e liso (tubos, perfis, chapas)
+  • ceramica   — bege/creme polido (piso, azulejo, revestimento)
+  • vidro      — reflexo especular com tom esverdeado, muito liso
+  • areia      — granulado bege fino (areia, brita, agregados)
   • outro      — nenhuma assinatura supera o limiar de confiança
 
 CADASTRO DE NOVOS MATERIAIS — para registrar um material novo basta tocar em
@@ -32,7 +35,8 @@ pelo material de imagens parecidas.
 import cv2
 import numpy as np
 
-MATERIAIS = ("papelao", "madeira", "gesso", "plastico", "alvenaria", "tijolo", "metal", "outro")
+MATERIAIS = ("papelao", "madeira", "gesso", "plastico", "alvenaria", "tijolo", "metal",
+             "ceramica", "vidro", "areia", "outro")
 
 NOME_MATERIAIS = {
     "papelao": "Papelão",
@@ -40,8 +44,11 @@ NOME_MATERIAIS = {
     "gesso": "Gesso/Drywall",
     "plastico": "Plástico/Lonas",
     "alvenaria": "Entulho de alvenaria",
-    "tijolo": "Tijolo/Cerâmica",
+    "tijolo": "Tijolo/Telha",
     "metal": "Metal/Tubos",
+    "ceramica": "Cerâmica/Revestimento",
+    "vidro": "Vidro",
+    "areia": "Areia/Agregado",
     "outro": "Outro material",
 }
 
@@ -54,11 +61,15 @@ CORES_MATERIAIS = {
     "alvenaria": (255, 160, 0),    # azul claro (cinza some no concreto)
     "tijolo": (60, 60, 225),       # vermelho-cerâmico
     "metal": (200, 150, 80),       # azul-aço
+    "ceramica": (150, 190, 235),   # salmão-claro (piso/azulejo bege polido)
+    "vidro": (160, 255, 210),      # verde-água (borda esverdeada do vidro)
+    "areia": (150, 210, 190),      # cáqui claro (granulado)
     "outro": (200, 200, 200),      # cinza
 }
 
 # Chaves da pergunta de material no terminal: [g]esso, [p]apelão, [m]adeira,
-# [l]onas/plástico, [a]lvenaria, [t]ijolo, m[e]tal, [o]utro.
+# [l]onas/plástico, [a]lvenaria, [t]ijolo, m[e]tal, [c]erâmica, [v]idro,
+# [r] areia/agregado, [o]utro.
 CHAVES_CLI = {
     "g": "gesso",
     "p": "papelao",
@@ -67,6 +78,9 @@ CHAVES_CLI = {
     "a": "alvenaria",
     "t": "tijolo",
     "e": "metal",
+    "c": "ceramica",
+    "v": "vidro",
+    "r": "areia",
     "o": "outro",
 }
 
@@ -125,6 +139,8 @@ def _medidas_regiao(hsv, edges, contorno):
         # --- materiais cadastrados depois (ver docstring do módulo) ---
         "fracao_vermelha": fracao(((h <= 12) | (h >= 170)) & (s >= 90) & (v >= 50)),
         "fracao_metal": fracao((v >= 200) & (s < 60)),
+        "fracao_bege": fracao((h >= 10) & (h <= 25) & (s >= 25) & (s < 95) & (v >= 90)),
+        "fracao_verde": fracao((h >= 35) & (h <= 85) & (s >= 25) & (v >= 60)),
         "densidade_bordas_interna": float(((edges > 0) & nucleo).sum() / max(int(nucleo.sum()), 1)),
     }
 
@@ -143,13 +159,18 @@ def _pontuar(metadados, m):
     return {
         "papelao": (
             0.45 * _ramp(marrom_total, 0.25, 0.55)
+            # papelão é fibroso MODERADO; granulado denso (areia/brita,
+            # 0.20+ de bordas internas) não é papelão
             + 0.25 * _ramp(m["densidade_bordas_interna"], 0.04, 0.13)
+            * (1.0 - _ramp(m["densidade_bordas_interna"], 0.18, 0.30))
             + 0.15 * (1.0 - _ramp(m["sat_media"], 100, 150))
             + 0.15 * (1.0 - _ramp(m["fracao_cinza_media"], 0.25, 0.50))
         ),
         "madeira": (
             0.35 * _ramp(m["fracao_terrosa"], 0.12, 0.40)
+            # veios/tábuas têm bordas MODERADAS; granulado denso é areia/brita
             + 0.40 * _ramp(m["densidade_bordas_interna"], 0.10, 0.22)
+            * (1.0 - _ramp(m["densidade_bordas_interna"], 0.24, 0.34))
             + 0.25 * _ramp(m["sat_media"], 55, 110)
         ),
         "gesso": (
@@ -178,11 +199,39 @@ def _pontuar(metadados, m):
         ),
         # Metal/tubos: brilho especular (muito claro, quase sem cor) em
         # superfície lisa. Diferencia do gesso pelo teto de brilho (V>=200)
-        # e pela textura interna baixa (chapa lisa x gesso quebrado).
+        # e pela textura interna baixa (chapa lisa x gesso quebrado); o
+        # termo final cede ao vidro quando há tom esverdeado.
         "metal": (
-            0.50 * _ramp(m["fracao_metal"], 0.20, 0.55)
+            0.45 * _ramp(m["fracao_metal"], 0.20, 0.55)
             + 0.25 * _ramp(m["brilho_medio"], 170, 220)
-            + 0.25 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.03, 0.10))
+            + 0.20 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.03, 0.10))
+            + 0.10 * (1.0 - _ramp(m["fracao_verde"], 0.15, 0.40))
+        ),
+        # Cerâmica/revestimento: piso/azulejo bege polido — creme com
+        # saturação moderada, brilho médio-alto e superfície lisa (poucas
+        # bordas internas). Diferencia do gesso pela cor bege (gesso é
+        # quase sem matiz) e do papelão pela textura (papelão é fibroso).
+        "ceramica": (
+            0.45 * _ramp(m["fracao_bege"], 0.20, 0.50)
+            + 0.20 * (1.0 - _ramp(m["sat_media"], 90, 150))
+            + 0.15 * _ramp(m["brilho_medio"], 110, 170)
+            + 0.20 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.10, 0.22))
+        ),
+        # Vidro: reflexo especular (como o metal) PORém com borda/tom
+        # esverdeado característico, e lisíssimo. Sem o verde, espelho
+        # brilhante é metal — com verde, é vidro.
+        "vidro": (
+            0.45 * _ramp(m["fracao_verde"], 0.10, 0.35)
+            + 0.30 * _ramp(m["fracao_metal"], 0.10, 0.40)
+            + 0.25 * (1.0 - _ramp(m["densidade_bordas_interna"], 0.02, 0.10))
+        ),
+        # Areia/agregado: granulado MUITO texturizado (cada grão é uma
+        # borda) em tom bege/marrom claro — a densidade de bordas internas
+        # bem acima de qualquer outro material é o traço dominante.
+        "areia": (
+            0.60 * _ramp(m["densidade_bordas_interna"], 0.18, 0.28)
+            + 0.20 * _ramp(m["fracao_bege"] + m["fracao_marrom"], 0.25, 0.60)
+            + 0.20 * (1.0 - _ramp(m["sat_media"], 110, 170))
         ),
     }
 
