@@ -24,7 +24,85 @@ import numpy as np
 # Versão do vetor de características: se mudar a lista abaixo OU o modo de
 # cálculo que as origina, incremente. A memória guarda esta versão junto de
 # cada experiência e recalcula os vetores automaticamente ao evoluir.
-VERSAO_CARACTERISTICAS = 2
+VERSAO_CARACTERISTICAS = 3
+
+
+# ---------------------------------------------------------------------- #
+# Reconhecimento de padrões (Aula 09) e qualidade de captura
+# ---------------------------------------------------------------------- #
+def detectar_pessoas(img):
+    """Detecta PESSOAS na cena pelo ROSTO (Aula 09 — reconhecimento de padrões).
+
+    Motivação: fotos de operários/professores não são desperdício — roupas e
+    pele têm textura e cores que enganam qualquer heurística de entulho.
+
+    Nota de engenharia: a Aula 09 usa o Haar Cascade (Viola-Jones, 2001),
+    que o OpenCV 5 REMOVEU; o sucessor oficial é o detector neural YuNet
+    (`FaceDetectorYN`, modelos/face_detection_yunet_2023mar.onnx) — mesmo
+    papel (localizar rostos), maior precisão. Cada rosto é expandido para
+    baixo para cobrir tronco/roupas.
+
+    Retorna lista de caixas (x0, y0, x1, y1) das pessoas.
+    """
+    detector = _detector_de_rostos()
+    if detector is None:
+        return []
+    altura, largura = img.shape[:2]
+    detector.setInputSize((largura, altura))
+    _, rostos = detector.detect(img)
+    caixas = []
+    if rostos is not None:
+        for rosto in rostos:
+            x, y, w, h = rosto[:4]
+            x0 = max(0, int(x - 0.35 * w))
+            y0 = max(0, int(y - 0.25 * h))
+            x1 = min(largura, int(x + 1.75 * w))
+            y1 = min(altura, int(y + 3.6 * h))
+            caixas.append((x0, y0, x1, y1))
+    return caixas
+
+
+_DETECTOR_ROSTO = None
+
+
+def _detector_de_rostos():
+    """Instância única do YuNet (carrega o modelo uma vez só).
+    Sem o arquivo do modelo, devolve None e a análise segue sem exclusão."""
+    global _DETECTOR_ROSTO
+    if _DETECTOR_ROSTO is None:
+        caminho = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "modelos",
+            "face_detection_yunet_2023mar.onnx",
+        )
+        if not os.path.isfile(caminho):
+            return None
+        try:
+            _DETECTOR_ROSTO = cv2.FaceDetectorYN_create(caminho, "", (320, 320))
+            _DETECTOR_ROSTO.setScoreThreshold(0.6)
+        except cv2.error:
+            return None
+    return _DETECTOR_ROSTO
+
+
+def avaliar_qualidade(img):
+    """Avalia a qualidade da foto (Aula 06: Laplaciano; Aula 04: brilho).
+
+    'Arrumar as fotografias' começa por avisar o operador: foto tremida
+    (variância do Laplaciano baixa) ou escura (brilho médio baixo) reduz a
+    precisão de TODAS as etapas seguintes.
+    Retorna dicionário com nitidez, brilho e alerta (None se está boa).
+    """
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    nitidez = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    brilho = float(gray.mean())
+    alertas = []
+    if nitidez < 60.0:
+        alertas.append("foto tremida/borrada — apoie a câmera e refaça")
+    if brilho < 55.0:
+        alertas.append("foto escura — busque iluminação melhor")
+    elif brilho > 235.0:
+        alertas.append("foto estourada de luz — evite luz direta")
+    return {"nitidez": round(nitidez, 1), "brilho": round(brilho, 1), "alerta": " | ".join(alertas) or None}
 
 # Ordem fixa das características (o vetor armazenado na memória segue exatamente esta ordem).
 NOMES_CARACTERISTICAS = [
@@ -277,11 +355,26 @@ def _remover_vaos_de_luz(validos, hsv):
 def analisar_cena(img):
     """Pipeline completo em uma única passada.
 
-    Retorna (caracteristicas, contornos) — o dicionário de características
-    segue NOMES_CARACTERISTICAS e 'contornos' são as regiões candidatas a
-    entulho, já com metadados (área, solidez, irregularidade) para anotação.
+    Retorna (caracteristicas, contornos, info) — o dicionário de
+    características segue NOMES_CARACTERISTICAS, 'contornos' são as regiões
+    candidatas a entulho (com metadados para anotação) e 'info' traz os
+    metadados da captura: pessoas detectadas (Haar Cascade, Aula 09) e
+    qualidade da foto (Laplaciano/brilho) — PESSOAS SÃO DESCONSIDERADAS da
+    análise (roupas/pele não são desperdício).
     """
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    altura_img, largura_img = gray.shape
+
+    # --- Pessoas na cena (Aula 09): máscara dos pixels a DESCONSIDERAR ---
+    caixas_pessoas = detectar_pessoas(img)
+    pessoas_masc = np.zeros((altura_img, largura_img), np.uint8)
+    for (x0, y0, x1, y1) in caixas_pessoas:
+        pessoas_masc[y0:y1, x0:x1] = 255
+    pessoas_masc = cv2.dilate(
+        pessoas_masc, cv2.getStructuringElement(cv2.MORPH_RECT, (11, 11)), iterations=2
+    )
+    utilizavel = pessoas_masc == 0
+    cobertura_pessoas = float((pessoas_masc > 0).mean())
 
     # --- Pré-processamento (Aulas 04/05) ---
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -293,7 +386,10 @@ def analisar_cena(img):
     lim_inf = max(0, int(0.66 * mediana))
     lim_sup = min(255, int(1.33 * mediana))
     edges = cv2.Canny(suavizada, lim_inf or 20, lim_sup or 60)
-    densidade_bordas = float((edges > 0).mean())
+    if not utilizavel.all():
+        edges = edges * utilizavel  # bordas sobre pessoas não contam
+    pixels_uteis = max(int(utilizavel.sum()), 1)
+    densidade_bordas = float((edges > 0).sum() / pixels_uteis)
 
     # Gradiente de Sobel (Aula 06) — intensidade média das transições
     sobx = cv2.Sobel(suavizada, cv2.CV_32F, 1, 0, ksize=3)
@@ -304,22 +400,22 @@ def analisar_cena(img):
     entropia = _entropia_normalizada(gray_eq)
     frac_blocos_text, _ = _estatisticas_por_bloco(gray_eq)
 
-    # --- Cor (HSV) ---
+    # --- Cor (HSV) — estatísticas só sobre pixels NÃO-pessoa ---
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0].astype(np.int32), hsv[..., 1].astype(np.int32), hsv[..., 2].astype(np.int32)
-    total = h.size
-    coloridos = s > 40  # ignora pixels quase pretos/brancos na média de matiz
+    total = pixels_uteis
+    coloridos = (s > 40) & utilizavel  # ignora quase pretos/brancos e pessoas
     media_matiz = float(h[coloridos].mean() / 179.0) if coloridos.any() else 0.0
-    media_saturacao = float(s.mean())
-    media_brilho = float(v.mean())
-    desvio_brilho = float(v.std())
+    media_saturacao = float(s[utilizavel].mean())
+    media_brilho = float(v[utilizavel].mean())
+    desvio_brilho = float(v[utilizavel].std())
 
     # Terrosos exigem saturação alta: piso de concreto empoeirado tem tons
     # parecidos, mas com saturação baixa (o corte em S>=70 evita esse falso positivo).
-    tons_terrosos = ((h >= 5) & (h <= 35) & (s >= 70) & (v >= 60)).sum() / total
-    cinza_concreto = ((s < 60) & (v > 60) & (v < 220)).sum() / total
-    branco_gesso = ((v > 200) & (s < 60)).sum() / total
-    vibrantes = (s > 120).sum() / total
+    tons_terrosos = (((h >= 5) & (h <= 35) & (s >= 70) & (v >= 60)) & utilizavel).sum() / total
+    cinza_concreto = (((s < 60) & (v > 60) & (v < 220)) & utilizavel).sum() / total
+    branco_gesso = (((v > 200) & (s < 60)) & utilizavel).sum() / total
+    vibrantes = ((s > 120) & utilizavel).sum() / total
 
     # --- Segmentação e contornos (com supressão de sombras) ---
     # As bordas da segmentação são calculadas sobre uma reconstrução "sem
@@ -336,6 +432,8 @@ def analisar_cena(img):
         min(255, int(1.33 * mediana_regiao)) or 60,
     )
     mascara = gerar_mascara_residuos(edges_regiao, sombras)
+    if not utilizavel.all():
+        mascara[~utilizavel] = 0  # regiões sobre pessoas não são candidatas
     contornos = _analise_contornos(mascara)
     contornos = _remover_sombras_regioes(contornos, hsv, edges)
     contornos = _remover_vaos_de_luz(contornos, hsv)
@@ -357,7 +455,12 @@ def analisar_cena(img):
         "gradiente_desvio": float(magnitude.std()),
     }
     caracteristicas.update(resumo_contornos)
-    return caracteristicas, contornos
+    info = {
+        "pessoas": caixas_pessoas,
+        "cobertura_pessoas": round(cobertura_pessoas, 3),
+        "qualidade": avaliar_qualidade(img),
+    }
+    return caracteristicas, contornos, info
 
 
 def extrair_caracteristicas(img):

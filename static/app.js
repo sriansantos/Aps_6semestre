@@ -184,11 +184,20 @@ function preencherInfo(dados) {
       ~${String(m.area_m2).replace(".", ",")} m²`
       + (m.montes > 1 ? ` (${m.montes} montes)` : ""))
     .join(" · ");
+  const alertaQualidade = dados.qualidade && dados.qualidade.alerta;
+  const linhaPessoas = dados.pessoas > 0
+    ? `<div class="regioes-linha">👷 ${dados.pessoas} pessoa(s) na cena — região(ões) desconsiderada(s) da análise</div>`
+    : "";
+  const linhaAlerta = alertaQualidade
+    ? `<div class="regioes-linha alerta-foto">📸 ${alertaQualidade}</div>`
+    : "";
   document.getElementById("info-cartao").innerHTML = `
     <div class="veredito ${cor}">${dados.rotulo_texto}</div>
     <div class="sub">${dados.probabilidade}% de probabilidade · confiança ${dados.confianca}</div>
     ${linhaMateriais ? `<div class="regioes-linha">🔧 ${linhaMateriais}</div>` : ""}
     <div class="regioes-linha">📍 ${dados.n_regioes} região(ões) candidata(s) — a maior ocupa ${dados.maior_regiao}% da cena</div>
+    ${linhaPessoas}
+    ${linhaAlerta}
     <details>
       <summary>linha de pensamento do sistema</summary>
       <ul>${dados.raciocinio.map(p => `<li>${p}</li>`).join("")}</ul>

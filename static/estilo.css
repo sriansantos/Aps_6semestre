@@ -339,6 +339,7 @@ main { max-width: 460px; margin: 0 auto; padding: 0 14px 34px; }
 .veredito.verde { color: var(--verde); }
 .sub { color: var(--cinza); font-size: .84rem; margin-top: 2px; }
 .regioes-linha { margin-top: 6px; font-size: .78rem; color: var(--cinza); }
+.regioes-linha.alerta-foto { color: #ffb300; font-weight: 600; }
 .info details { margin-top: 8px; font-size: .76rem; color: var(--cinza); }
 .info summary { color: var(--amarelo); cursor: pointer; font-weight: 700; }
 .info ul { margin: 6px 0 2px; padding-left: 16px; }

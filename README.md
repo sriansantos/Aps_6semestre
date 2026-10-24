@@ -149,6 +149,30 @@ em `dados/capturas/` e entra no mesmo fluxo de confirmação humana. Isso
 atende à aquisição por **câmera** prevista no roteiro da APS ("arquivos de
 imagem ou vídeo… ou câmera").
 
+### Pessoas na cena não são desperdício (Aula 09 — reconhecimento de padrões)
+
+Fotografou um operário (ou o professor) e o sistema acusou desperdício? Não
+mais: **o detector de rostos (Viola-Jones/Aula 09) localiza pessoas na cena e
+suas regiões são desconsideradas** — roupas, pele e o corpo não entram nas
+estatísticas de cor/textura, na segmentação nem nos contornos. Cada rosto é
+expandido para cobrir o tronco, e o cartão mostra "👷 N pessoa(s) na cena —
+região(ões) desconsiderada(s)". Quando as pessoas cobrem parte relevante da
+cena, o veredito também é puxado ao neutro (incerteza por oclusão).
+
+**Nota de engenharia:** o OpenCV 5 **removeu** o `CascadeClassifier` do Haar
+da Aula 09; o sistema usa o sucessor oficial, o detector neural **YuNet**
+(`FaceDetectorYN`, modelo de 230 KB incluso em `modelos/`). A cadeia de
+raciocínio registra o passo: *"Reconhecimento de padrões (Aula 09): N
+pessoa(s) detectada(s)"*.
+
+### Qualidade da foto (arrumando as fotografias)
+
+Antes de tudo, o sistema mede a **nitidez pela variância do Laplaciano
+(Aula 06)** e o **brilho médio (Aula 04)** da captura. Foto tremida, escura
+ou estourada gera um aviso no cartão ("📸 foto escura — busque iluminação
+melhor") — porque nenhuma técnica de segmentação salva uma captura ruim.
+"Arrumar as fotografias" começa por saber quando a foto precisa ser refeita.
+
 ### Login "Engenhender"
 
 Ao abrir o site, a tela de login pede apenas o **nome do operador** — não é

@@ -229,6 +229,8 @@ def api_analizar():
         "n_regioes": len(res.contornos),
         "maior_regiao": round(maior * 100),
         "raciocinio": res.raciocinio,
+        "pessoas": res.pessoas,
+        "qualidade": res.qualidade or {},
         # identificação do tipo de material (materiais.py): o que é, quanto
         # ocupa em m², em quantos montes e a COR de anotação — exibidos
         # abaixo da foto como pontos coloridos

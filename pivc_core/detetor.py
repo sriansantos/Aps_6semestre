@@ -117,6 +117,8 @@ class ResultadoAnalise:
     imagem_altura: int = 0
     vetor: object = None  # np.ndarray — vetor de características desta análise
     imagem: object = None  # np.ndarray — imagem normalizada usada na análise
+    pessoas: int = 0       # nº de pessoas detectadas (Haar) e desconsideradas
+    qualidade: dict = None  # nitidez/brilho/alerta da captura (avaliar_qualidade)
 
     @property
     def rotulo_previsto(self):
@@ -149,7 +151,7 @@ class DetetorDesperdicio:
 
     def _extrair_vetor(self, caminho):
         img = carregar_imagem(caminho)
-        c, _ = analisar_cena(img)
+        c, _, _ = analisar_cena(img)
         return vetor_de(c)
 
     # ------------------------------------------------------------------ #
@@ -158,13 +160,21 @@ class DetetorDesperdicio:
     def analisar(self, caminho_imagem, largura_m=None):
         img = carregar_imagem(caminho_imagem)
         altura, largura = img.shape[:2]
-        c, contornos = analisar_cena(img)
+        c, contornos, info = analisar_cena(img)
         vetor = vetor_de(c)
 
         p_heur, indicadores = _heuristica_engenharia(c)
         p_mem, casos, nivel_analogia = self._julgamento_por_analogia(vetor)
         p_mod = self.modelo.probabilidade(vetor)
         prob, pesos = self._fundir(p_heur, p_mem, p_mod, nivel_analogia)
+
+        # Incerteza por oclusão: quando pessoas ocupam parte relevante da
+        # cena, a evidência restante é parcial — o veredito tende ao neutro
+        # na proporção da cobertura (e as pessoas já foram excluídas das
+        # estatísticas; isto é a incerteza do que NÃO se pode ver).
+        cobertura = float(info.get("cobertura_pessoas", 0.0))
+        if info.get("pessoas") and cobertura > 0:
+            prob = prob + (0.5 - prob) * min(0.5, cobertura * 0.7)
 
         # --- Identificação do tipo de material -------------------------- #
         # 1) assinaturas visuais por região (a priori);
@@ -231,12 +241,20 @@ class DetetorDesperdicio:
             imagem_altura=altura,
             vetor=vetor,
             imagem=img,
+            pessoas=len(info["pessoas"]),
+            qualidade=info["qualidade"],
         )
         resultado.raciocinio = self._montar_raciocinio(
             largura, altura, p_heur, indicadores, p_mem, casos, nivel_analogia, p_mod, pesos, prob,
             dist_assinaturas, dist_memoria_material, n_casos_material, dist_material,
-            material_dominante, peso_memoria_material, largura_m, aglomerados,
+            material_dominante, peso_memoria_material, largura_m, aglomerados, info,
         )
+        if info.get("pessoas") and info.get("cobertura_pessoas", 0) > 0.15:
+            resultado.raciocinio.append(
+                f"Passo 6b — Incerteza por oclusão: pessoas cobrem "
+                f"{info['cobertura_pessoas'] * 100:.0f}% da cena — veredito puxado ao neutro "
+                f"na proporção do que não pôde ser analisado."
+            )
         return resultado
 
     # ------------------------------------------------------------------ #
@@ -396,13 +414,27 @@ class DetetorDesperdicio:
     def _montar_raciocinio(
         self, largura, altura, p_heur, indicadores, p_mem, casos, nivel, p_mod, pesos, p_final,
         dist_assinaturas, dist_memoria, n_casos_material, dist_material, material_dominante,
-        peso_memoria_material, largura_m, aglomerados,
+        peso_memoria_material, largura_m, aglomerados, info=None,
     ):
+        info = info or {"pessoas": [], "qualidade": None}
+        qualidade = info.get("qualidade") or {}
         passos = []
         passos.append(
             f"Passo 1 — Pré-processamento: imagem normalizada para {largura}x{altura} px, "
             f"contraste equalizado (CLAHE) e suavização gaussiana 5x5."
         )
+        if qualidade.get("alerta"):
+            passos.append(
+                f"⚠ Passo 1b — Qualidade da captura (Laplaciano {qualidade.get('nitidez')} / "
+                f"brilho {qualidade.get('brilho')}): {qualidade['alerta']}."
+            )
+        n_pessoas = len(info.get("pessoas", []))
+        if n_pessoas:
+            passos.append(
+                f"Passo 1c — Reconhecimento de padrões (Haar Cascade, Aula 09): {n_pessoas} "
+                f"pessoa(s) detectada(s) — suas regiões foram DESCONSIDERADAS (roupas e "
+                f"pele não são desperdício)."
+            )
         detalhes = ", ".join(f"{nome} {valor:.2f}" for _, valor, nome in indicadores)
         passos.append(f"Passo 2 — Indicadores visuais (Canny, Sobel, HSV, contornos): {detalhes}.")
         passos.append(f"Passo 3 — Heurística de engenharia (conhecimento a priori): p = {p_heur:.2f}.")
