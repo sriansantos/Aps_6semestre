@@ -16,6 +16,7 @@ Cada característica é um número interpretável — o sistema consegue explica
 """
 
 import os
+import threading
 import unicodedata
 
 import cv2
@@ -48,8 +49,11 @@ def detectar_pessoas(img):
     if detector is None:
         return []
     altura, largura = img.shape[:2]
-    detector.setInputSize((largura, altura))
-    _, rostos = detector.detect(img)
+    # O servidor web analisa cartões em paralelo e o detector DNN NÃO é
+    # thread-safe (buffers internos compartilhados) — a trava serializa o uso.
+    with _TRAVA_DETECTOR:
+        detector.setInputSize((largura, altura))
+        _, rostos = detector.detect(img)
     caixas = []
     if rostos is not None:
         for rosto in rostos:
@@ -63,24 +67,26 @@ def detectar_pessoas(img):
 
 
 _DETECTOR_ROSTO = None
+_TRAVA_DETECTOR = threading.Lock()
 
 
 def _detector_de_rostos():
     """Instância única do YuNet (carrega o modelo uma vez só).
     Sem o arquivo do modelo, devolve None e a análise segue sem exclusão."""
     global _DETECTOR_ROSTO
-    if _DETECTOR_ROSTO is None:
-        caminho = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "modelos",
-            "face_detection_yunet_2023mar.onnx",
-        )
-        if not os.path.isfile(caminho):
-            return None
-        try:
-            _DETECTOR_ROSTO = cv2.FaceDetectorYN_create(caminho, "", (320, 320))
-            _DETECTOR_ROSTO.setScoreThreshold(0.6)
-        except cv2.error:
-            return None
+    with _TRAVA_DETECTOR:
+        if _DETECTOR_ROSTO is None:
+            caminho = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "..", "modelos",
+                "face_detection_yunet_2023mar.onnx",
+            )
+            if not os.path.isfile(caminho):
+                return None
+            try:
+                _DETECTOR_ROSTO = cv2.FaceDetectorYN_create(caminho, "", (320, 320))
+                _DETECTOR_ROSTO.setScoreThreshold(0.6)
+            except cv2.error:
+                return None
     return _DETECTOR_ROSTO
 
 

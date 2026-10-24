@@ -340,6 +340,37 @@ main { max-width: 460px; margin: 0 auto; padding: 0 14px 34px; }
 .sub { color: var(--cinza); font-size: .84rem; margin-top: 2px; }
 .regioes-linha { margin-top: 6px; font-size: .78rem; color: var(--cinza); }
 .regioes-linha.alerta-foto { color: #ffb300; font-weight: 600; }
+
+/* ---------- seletor de material (confirmação/correção no cartão) ---------- */
+.seletor-material { margin-top: 8px; }
+.seletor-rotulo {
+  display: block;
+  font-size: .66rem;
+  color: #6e6e6e;
+  letter-spacing: .5px;
+  text-transform: lowercase;
+  margin-bottom: 4px;
+}
+.chips-material { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip-material {
+  display: inline-flex;
+  align-items: center;
+  background: #161616;
+  border: 1px solid var(--carta-borda);
+  color: var(--cinza);
+  border-radius: 999px;
+  padding: 4px 9px 4px 6px;
+  font-size: .68rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.chip-material .ponto-cor { width: 8px; height: 8px; margin-right: 4px; }
+.chip-material.selecionado {
+  border-color: var(--amarelo);
+  color: var(--texto);
+  background: rgba(255, 196, 0, .10);
+  font-weight: 700;
+}
 .info details { margin-top: 8px; font-size: .76rem; color: var(--cinza); }
 .info summary { color: var(--amarelo); cursor: pointer; font-weight: 700; }
 .info ul { margin: 6px 0 2px; padding-left: 16px; }

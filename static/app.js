@@ -43,6 +43,7 @@ const el = {
 };
 
 let operador = null;
+let CATALOGO_MATERIAIS = [];   // [{chave, nome, cor}] de /api/materiais
 let fila = [];              // {caminho, dados, decidido, rotulo}
 let indice = 0;             // cartão atual
 let registradasSessao = 0;  // confirmações nesta sessão
@@ -164,7 +165,7 @@ function renderizar() {
   // dados da análise (com guarda contra respostas atrasadas)
   analisar(atual).then(dados => {
     if (meuToken !== tokenRender) return;
-    preencherInfo(dados);
+    preencherInfo(dados, atual);
     const pre = new Image(); pre.src = dados.url_anotada;  // prepara o flip
   }).catch(e => {
     if (meuToken !== tokenRender) return;
@@ -176,7 +177,7 @@ function renderizar() {
   fila.slice(indice + 1, indice + 3).forEach(it => analisar(it).catch(() => {}));
 }
 
-function preencherInfo(dados) {
+function preencherInfo(dados, item) {
   const cor = dados.desperdicio ? "amarelo" : "verde";
   const linhaMateriais = (dados.materiais || [])
     .slice(0, 3)
@@ -191,6 +192,18 @@ function preencherInfo(dados) {
   const linhaAlerta = alertaQualidade
     ? `<div class="regioes-linha alerta-foto">📸 ${alertaQualidade}</div>`
     : "";
+
+  // Seletor de material: default = material dominante detectado; o operador
+  // pode corrigir antes de arrastar — a confirmação treina a identificação.
+  const defaultMaterial = item.materialSelecionado || (dados.materiais || [])[0]?.chave || null;
+  item.materialSelecionado = defaultMaterial;
+  const chips = CATALOGO_MATERIAIS
+    .filter(m => m.chave !== "outro")
+    .map(m => `<button type="button" class="chip-material${m.chave === defaultMaterial ? " selecionado" : ""}"
+      data-chave="${m.chave}" title="${m.nome}">
+      <span class="ponto-cor" style="background:${m.cor}"></span>${m.nome.split("/")[0]}</button>`)
+    .join("");
+
   document.getElementById("info-cartao").innerHTML = `
     <div class="veredito ${cor}">${dados.rotulo_texto}</div>
     <div class="sub">${dados.probabilidade}% de probabilidade · confiança ${dados.confianca}</div>
@@ -198,10 +211,22 @@ function preencherInfo(dados) {
     <div class="regioes-linha">📍 ${dados.n_regioes} região(ões) candidata(s) — a maior ocupa ${dados.maior_regiao}% da cena</div>
     ${linhaPessoas}
     ${linhaAlerta}
+    <div class="seletor-material">
+      <span class="seletor-rotulo">é o quê? (toque p/ corrigir)</span>
+      <div class="chips-material">${chips}</div>
+    </div>
     <details>
       <summary>linha de pensamento do sistema</summary>
       <ul>${dados.raciocinio.map(p => `<li>${p}</li>`).join("")}</ul>
     </details>`;
+
+  document.getElementById("info-cartao")
+    .querySelectorAll(".chip-material")
+    .forEach(chip => chip.addEventListener("click", () => {
+      item.materialSelecionado = chip.dataset.chave;
+      document.querySelectorAll(".chip-material").forEach(c =>
+        c.classList.toggle("selecionado", c.dataset.chave === item.materialSelecionado));
+    }));
 }
 
 /* ---------------- arrastar (pointer events) ---------------- */
@@ -270,15 +295,23 @@ function decidir(rotulo) {
   carta.style.transform =
     `translate(${rotulo === 1 ? 560 : -560}px, -50px) rotate(${rotulo === 1 ? 22 : -22}deg)`;
 
+  // Material confirmado: nos swipes de DESPERDÍCIO vai o material do seletor
+  // (dominante detectado, ou o que o operador corrigiu); cenas limpas não têm.
+  const material = rotulo === 1 ? (item.materialSelecionado || null) : null;
+  const nomeMaterial = material
+    ? (CATALOGO_MATERIAIS.find(m => m.chave === material) || {}).nome || material
+    : null;
+
   api("/api/feedback", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ caminho: item.caminho, rotulo }),
+    body: JSON.stringify({ caminho: item.caminho, rotulo, material }),
   }).then(r => {
     atualizarChip(r.status);
-    toast(r.acertou
+    const base = r.acertou
       ? `✔ Experiência #${r.exp_id} — o sistema havia acertado`
-      : `✏ Experiência #${r.exp_id} — memória CORRIGIDA pelo operador`);
+      : `✏ Experiência #${r.exp_id} — memória CORRIGIDA pelo operador`;
+    toast(nomeMaterial ? `${base} · ${nomeMaterial}` : base);
   }).catch(e => toast("Falha ao registrar: " + e.message, true));
 
   indice++;
@@ -315,6 +348,10 @@ async function entrar() {
     el.barra().hidden = false;
     el.entrada().hidden = false;
     api("/api/status").then(atualizarChip).catch(() => {});
+    if (CATALOGO_MATERIAIS.length === 0) {
+      api("/api/materiais").then(lista => { CATALOGO_MATERIAIS = lista; })
+        .catch(() => {});
+    }
     toast(`bem-vindo(a) à obra, ${nome.split(" ")[0]}!`);
   } catch (e) { toast(e.message, true); }
 }
